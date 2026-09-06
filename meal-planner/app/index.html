@@ -83,11 +83,10 @@
   .chip.tier-rarely{background:#F3E1D2; color:#8A4A1E;}
   .chip.tier-unranked{background:#EDEDED; color:#5A5A5A;}
   .chip.flag{ background:#FBE0E6; color:#A62A4C; }
-  .tier-select{ font-size:0.62rem; text-transform:uppercase; font-weight:700; letter-spacing:0.02em; border:1px solid var(--line);
-    border-radius:999px; padding:3px 22px 3px 8px; cursor:pointer; -webkit-appearance:none; appearance:none;
-    background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);
-    background-position:calc(100% - 12px) 52%,calc(100% - 8px) 52%; background-size:4px 4px,4px 4px; background-repeat:no-repeat; }
-  .tier-select:hover{ border-color:var(--accent); }
+  .rank-label{ font-size:0.6rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-soft); font-weight:700; }
+  .tier-select{ font-size:0.72rem; font-weight:600; border:1px solid var(--line); border-radius:6px;
+    padding:2px 4px; background:var(--card); color:var(--ink); cursor:pointer; max-width:120px; }
+  .tier-select:hover, .tier-select:focus{ border-color:var(--accent); }
   .chip.in-week{ background:#DCEEE9; color:#1F6E5C; }
   @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .chip.in-week{ background:#163530; color:#8FD6C4; } }
   :root[data-theme="dark"] .chip.in-week{ background:#163530; color:#8FD6C4; }
@@ -301,9 +300,11 @@
   }
 
   // Whole-word match, so "butternut squash" isn't butter and "eggplant" isn't egg.
+  // A trailing s/es is allowed so plurals ("hazelnuts", "tortillas") still match —
+  // that only extends the end of the word, so the boundary protections hold.
   function matchesKeyword(name, keyword){
     var esc = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp('(^|[^a-z])' + esc + '([^a-z]|$)', 'i').test(name);
+    return new RegExp('(^|[^a-z])' + esc + '(?:e?s)?([^a-z]|$)', 'i').test(name);
   }
 
   function autoFlagIngredient(name){
@@ -1063,8 +1064,11 @@
       '<button type="button" class="m-name-btn" data-action="toggleMealView" data-id="'+m.id+'">'+escapeHtml(m.name)+'</button>' +
       '<div class="m-meta">' +
         // Ranking straight from the row: it's the edit you make most often, and
-        // it shouldn't require opening and saving the whole form.
-        '<select class="chip tier-select tier-'+(m.tier||'unranked')+'" data-action="setMealTier" data-id="'+m.id+'" title="Ranking">' +
+        // it shouldn't require opening and saving the whole form. Deliberately a
+        // NATIVE select (no appearance:none) so it's obviously a control and
+        // opens the system picker on a phone.
+        '<span class="rank-label">Rank</span>' +
+        '<select class="tier-select" data-action="setMealTier" data-id="'+m.id+'" title="Ranking">' +
           TIERS.map(function(t){ return '<option value="'+t+'"'+((m.tier||'unranked')===t?' selected':'')+'>'+TIER_LABELS[t]+'</option>'; }).join('') +
         '</select>' +
         (m.base ? '<span class="muted">'+escapeHtml(m.base)+'</span>' : '') +
@@ -1171,7 +1175,11 @@
     var isEdit = !!d.id;
     var html = '<div class="overlay" id="form-overlay"><div class="sheet">' +
       '<div class="sheet-head"><h3>'+(isEdit ? 'Edit meal' : 'New meal')+'</h3><button class="close-x" data-action="closeForm">&times;</button></div>' +
-      '<form data-action="saveMealForm">' +
+      // Submit actions use their OWN attribute. With data-action, the delegated
+      // click listener's closest('[data-action]') walked up from any plain field
+      // inside the form — the notes box, the method box — matched the form
+      // itself, and fired save-and-close on a mere click into a text field.
+      '<form data-submit-action="saveMealForm">' +
       '<div class="field"><label>Name</label><input type="text" id="f-name" value="'+escapeHtml(d.name)+'" required></div>' +
       '<div class="grid-2">' +
         '<div class="field"><label>Base / main protein</label><input type="text" id="f-base" value="'+escapeHtml(d.base)+'"></div>' +
@@ -1575,6 +1583,11 @@
   document.getElementById('app').addEventListener('click', function(e){
     var el = e.target.closest('[data-action]');
     if (!el) return;
+    // closest() walks upward, so a click on a plain child (a text field, a label,
+    // empty space) can resolve to a CONTAINER that carries an action. Only ever
+    // treat a real control as clicked.
+    var tag = el.tagName;
+    if (tag !== 'BUTTON' && tag !== 'A') return;
     var action = el.getAttribute('data-action');
     if (!actions[action] || CHANGE_ACTIONS[action] || LIVE_INPUT_ACTIONS[action]) return;
     runAction(actions[action], el, el.getAttribute('data-id'), e);
@@ -1598,18 +1611,28 @@
     if (blurActions[action]) runAction(blurActions[action], el, null, e);
   }, true);
   document.getElementById('app').addEventListener('submit', function(e){
-    var el = e.target.closest('[data-action]');
+    var el = e.target.closest('[data-submit-action]');
     if (!el) return;
     // Always stop the native submit first. If the handler below were missing or
     // threw before its own preventDefault, the browser would navigate the frame
     // away from the app — indistinguishable from a crash.
     e.preventDefault();
-    var action = el.getAttribute('data-action');
+    var action = el.getAttribute('data-submit-action');
     if (actions[action]) runAction(actions[action], el, null, e);
   });
+  // Backdrop dismissal requires the press AND the release to both land on the
+  // backdrop itself. Closing on mousedown alone meant a drag that started inside
+  // the sheet — or a stray touch during a re-render — could throw away an edit
+  // in progress.
+  var backdropPressTarget = null;
   document.getElementById('app').addEventListener('mousedown', function(e){
-    if (e.target.id === 'form-overlay') runAction(actions.closeForm, e.target, null, e);
-    if (e.target.id === 'week-picker-overlay') runAction(actions.closeWeekPicker, e.target, null, e);
+    backdropPressTarget = (e.target && e.target.id) ? e.target.id : null;
+  });
+  document.getElementById('app').addEventListener('click', function(e){
+    var id = e.target && e.target.id;
+    if (!id || id !== backdropPressTarget) return;
+    if (id === 'form-overlay') runAction(actions.closeForm, e.target, null, e);
+    if (id === 'week-picker-overlay') runAction(actions.closeWeekPicker, e.target, null, e);
   });
 
   render();
