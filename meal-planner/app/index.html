@@ -83,6 +83,11 @@
   .chip.tier-rarely{background:#F3E1D2; color:#8A4A1E;}
   .chip.tier-unranked{background:#EDEDED; color:#5A5A5A;}
   .chip.flag{ background:#FBE0E6; color:#A62A4C; }
+  .tier-select{ font-size:0.62rem; text-transform:uppercase; font-weight:700; letter-spacing:0.02em; border:1px solid var(--line);
+    border-radius:999px; padding:3px 22px 3px 8px; cursor:pointer; -webkit-appearance:none; appearance:none;
+    background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);
+    background-position:calc(100% - 12px) 52%,calc(100% - 8px) 52%; background-size:4px 4px,4px 4px; background-repeat:no-repeat; }
+  .tier-select:hover{ border-color:var(--accent); }
   .chip.in-week{ background:#DCEEE9; color:#1F6E5C; }
   @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .chip.in-week{ background:#163530; color:#8FD6C4; } }
   :root[data-theme="dark"] .chip.in-week{ background:#163530; color:#8FD6C4; }
@@ -398,6 +403,8 @@
     confirmNewWeek: false,
     confirmAutoPick: false,
     actionError: null,
+    formError: null,
+    formSaving: false,
     toast: null,
     copyFallbackText: null
   };
@@ -410,42 +417,56 @@
       return Array.isArray(list) ? list.map(normalizeMeal) : [];
     } catch(e){ return []; }
   }
-  function localSaveMeals(list){ localStorage.setItem(LS_MEALS, JSON.stringify(list)); meals = list; render(); }
+  // localStorage WRITES have to be guarded, not just reads: inside an iframe on
+  // iOS Safari with Prevent Cross-Site Tracking on (the default), touching
+  // localStorage throws SecurityError. Unguarded, every save threw and the edit
+  // silently disappeared.
+  function localWrite(key, value){
+    try { localStorage.setItem(key, JSON.stringify(value)); return true; }
+    catch(e){ throw new Error('This browser is blocking local storage for the page (' + (e && e.name ? e.name : 'storage error') + '), so nothing can be saved on this device.'); }
+  }
+  function localSaveMeals(list){ localWrite(LS_MEALS, list); meals = list; render(); }
   function localGetWeek(){ try { return JSON.parse(localStorage.getItem(LS_WEEK)||'null'); } catch(e){ return null; } }
-  function localSaveWeek(w){ localStorage.setItem(LS_WEEK, JSON.stringify(w)); weekDoc = w; render(); }
+  function localSaveWeek(w){ localWrite(LS_WEEK, w); weekDoc = w; render(); }
 
+  // Every write returns a promise now. Nothing swallows a rejection: a failed
+  // save has to be visible, because the alternative — closing the form and
+  // discarding the draft as though it worked — is indistinguishable from the app
+  // simply ignoring you.
   function saveMeal(meal){
     var toWrite = JSON.parse(JSON.stringify(meal));
     var id = toWrite.id; delete toWrite.id;
     toWrite.updatedAt = Date.now();
     if (!id){ toWrite.createdAt = Date.now(); }
     if (db){
-      if (id){ db.doc('meals/'+id).set(toWrite).catch(function(){}); }
-      else { db.collection('meals').add(toWrite).catch(function(){}); }
-    } else {
-      var list = localGetMeals();
-      if (id){
-        var idx = list.findIndex(function(m){ return m.id===id; });
-        if (idx>=0) list[idx] = Object.assign({id:id}, toWrite);
-      } else {
-        toWrite.id = uid();
-        list.push(toWrite);
-      }
-      localSaveMeals(list);
+      return id ? db.doc('meals/'+id).set(toWrite) : db.collection('meals').add(toWrite);
     }
+    var list = localGetMeals();
+    if (id){
+      var idx = list.findIndex(function(m){ return m.id===id; });
+      if (idx>=0) list[idx] = Object.assign({id:id}, toWrite);
+      else { toWrite.id = id; list.push(toWrite); }
+    } else {
+      toWrite.id = uid();
+      list.push(toWrite);
+    }
+    localSaveMeals(list);
+    return Promise.resolve();
   }
   function deleteMeal(id){
-    if (db){ db.doc('meals/'+id).delete().catch(function(){}); }
-    else { localSaveMeals(localGetMeals().filter(function(m){ return m.id!==id; })); }
+    if (db) return db.doc('meals/'+id).delete();
+    localSaveMeals(localGetMeals().filter(function(m){ return m.id!==id; }));
+    return Promise.resolve();
   }
   function saveWeek(w){
-    if (db){ db.doc('week/current').set(w).catch(function(){}); }
-    else { localSaveWeek(w); }
+    if (db) return db.doc('week/current').set(w);
+    localSaveWeek(w);
+    return Promise.resolve();
   }
   function updateWeek(partial){
     var cur = weekDoc || { weekStart: mondayIso(), mealIds: [], checkedItems: {} };
     var next = Object.assign({}, cur, partial);
-    saveWeek(next);
+    return saveWeek(next).catch(function(err){ reportActionError(err); });
   }
 
   async function initStore(){
@@ -467,12 +488,28 @@
       meals = qs.docs.map(function(d){ return normalizeMeal(Object.assign({id:d.id}, d.data())); });
       dataLoaded = true;
       render();
-    }, function(){ localMode = true; meals = localGetMeals(); dataLoaded = true; render(); });
+    }, function(err){ fallBackToLocal(err); });
     db.doc('week/current').onSnapshot(function(snap){
       weekDoc = snap.exists ? snap.data() : null;
       dataLoaded = true;
       render();
-    }, function(){});
+    }, function(err){ fallBackToLocal(err); });
+  }
+
+  // The shared store died mid-session. `db` MUST be cleared here, not just
+  // localMode set: leaving it set sent writes to the dead database while the
+  // list rendered from localStorage, so every edit landed somewhere the app
+  // never read back — saving appeared to do nothing at all.
+  function fallBackToLocal(err){
+    if (localMode && !db) return;
+    db = null;
+    localMode = true;
+    meals = localGetMeals();
+    weekDoc = localGetWeek();
+    dataLoaded = true;
+    ui.actionError = 'Lost the shared list' + (err && err.code ? ' ('+err.code+')' : '') +
+      ' — still working on this device, but changes won’t sync until you reload.';
+    render();
   }
 
   // ---------- rules engine ----------
@@ -691,8 +728,11 @@
       return { item: i.item||'', quantity: String(i.quantity!=null?i.quantity:''), unit: i.unit||'', section: SECTIONS.indexOf(i.section)!==-1 ? i.section : 'other', pantryStaple: !!i.pantryStaple, flag: flag||null, substitute: sub };
     }) : [];
   }
+  // Clears the transient state that belongs to one visit to the meal form, so a
+  // stale error or a stuck "Saving…" never carries over into the next meal.
   function resetAdjustState(){
     ui.adjustInstruction = ''; ui.adjusting = false; ui.adjustError = null; ui.adjustApplied = false;
+    ui.formError = null; ui.formSaving = false;
   }
   function draftToMeal(draft, sourceUrl){
     var m = blankMeal();
@@ -1022,7 +1062,11 @@
     var html = '<div class="meal-row-wrap"><div class="meal-row"><div class="m-info">' +
       '<button type="button" class="m-name-btn" data-action="toggleMealView" data-id="'+m.id+'">'+escapeHtml(m.name)+'</button>' +
       '<div class="m-meta">' +
-        '<span class="chip tier-'+(m.tier||'unranked')+'">'+TIER_LABELS[m.tier||'unranked']+'</span>' +
+        // Ranking straight from the row: it's the edit you make most often, and
+        // it shouldn't require opening and saving the whole form.
+        '<select class="chip tier-select tier-'+(m.tier||'unranked')+'" data-action="setMealTier" data-id="'+m.id+'" title="Ranking">' +
+          TIERS.map(function(t){ return '<option value="'+t+'"'+((m.tier||'unranked')===t?' selected':'')+'>'+TIER_LABELS[t]+'</option>'; }).join('') +
+        '</select>' +
         (m.base ? '<span class="muted">'+escapeHtml(m.base)+'</span>' : '') +
         (m.effort ? '<span class="muted mono">'+escapeHtml(m.effort)+'</span>' : '') +
         (inWeek ? '<span class="chip in-week">In this week</span>' : '') +
@@ -1155,9 +1199,11 @@
       '<fieldset><legend>Ingredients</legend>' + renderIngredientRows(d.ingredients) +
         '<button type="button" class="btn-link" data-action="addIngredientRow">+ add ingredient</button></fieldset>' +
 
+      (ui.formError ? '<div class="warnbox warn" style="margin-top:12px;">'+escapeHtml(ui.formError)+'</div>' : '') +
       '<div class="form-actions">' +
         '<div>'+(isEdit ? '<button type="button" class="btn btn-ghost" data-action="markCooked">Mark cooked today</button>' : '')+'</div>' +
-        '<div class="row-actions"><button type="button" class="btn btn-ghost" data-action="closeForm">Cancel</button><button type="submit" class="btn btn-primary">Save meal</button></div>' +
+        '<div class="row-actions"><button type="button" class="btn btn-ghost" data-action="closeForm">Cancel</button>' +
+        '<button type="submit" class="btn btn-primary"'+(ui.formSaving?' disabled':'')+'>'+(ui.formSaving?'Saving…':'Save meal')+'</button></div>' +
       '</div>' +
       '</form></div></div>';
     return html;
@@ -1224,6 +1270,10 @@
   // ---------- actions ----------
   function syncFormDraftFromDom(){
     var d = ui.formDraft; if (!d) return;
+    // These two run on every render while the form is open; if either were ever
+    // missing, the assignments below would throw and break the whole form.
+    if (!Array.isArray(d.dietFlags)) d.dietFlags = [];
+    if (!Array.isArray(d.ingredients)) d.ingredients = [];
     var g = function(id){ var el = document.getElementById(id); return el ? el.value : ''; };
     d.name = g('f-name'); d.base = g('f-base'); d.tier = g('f-tier'); d.effort = g('f-effort');
     d.effortMinutes = g('f-effortMinutes'); d.servings = g('f-servings') || 4;
@@ -1262,10 +1312,25 @@
     addMeal: function(){ resetAdjustState(); ui.formDraft = blankMeal(); ui.formOpen = true; render(); },
     editMeal: function(el, id){ var m = meals.find(function(x){ return x.id===id; }); if (!m) return; resetAdjustState(); ui.formDraft = JSON.parse(JSON.stringify(m)); ui.formOpen = true; render(); },
     toggleMealView: function(el, id){ ui.expandedMealId = (ui.expandedMealId === id ? null : id); render(); },
+    setMealTier: function(el, id){
+      var m = meals.find(function(x){ return x.id===id; });
+      if (!m) return;
+      var updated = JSON.parse(JSON.stringify(m));
+      updated.tier = el.value;
+      return saveMeal(updated).then(function(){
+        ui.toast = 'Ranked ' + (TIER_LABELS[el.value] || el.value).toLowerCase();
+        render();
+        setTimeout(function(){ ui.toast = null; render(); }, 1500);
+      }).catch(reportActionError);
+    },
     closeForm: function(){ resetAdjustState(); ui.formOpen = false; ui.formDraft = null; render(); },
     askDelete: function(el, id){ ui.confirmDeleteId = id; render(); },
     cancelDelete: function(){ ui.confirmDeleteId = null; render(); },
-    confirmDelete: function(el, id){ deleteMeal(id); ui.confirmDeleteId = null; render(); },
+    confirmDelete: function(el, id){
+      ui.confirmDeleteId = null;
+      render();
+      return deleteMeal(id).catch(reportActionError);
+    },
     markCooked: function(){
       syncFormDraftFromDom();
       ui.formDraft.lastCooked = todayIso();
@@ -1432,19 +1497,38 @@
       ui.formDraft = m; ui.formOpen = true; render();
     },
 
-    saveMealForm: function(el, id, extra, e){
+    saveMealForm: async function(el, id, extra, e){
       e.preventDefault();
+      if (ui.formSaving) return;
       syncFormDraftFromDom();
       var d = ui.formDraft;
-      if (!d.name || !d.name.trim()) return;
-      d.ingredients.forEach(function(ing){
+      if (!d){ return; }
+      // Used to `return` silently here, which looks exactly like a dead Save button.
+      if (!d.name || !d.name.trim()){
+        ui.formError = 'Give the meal a name before saving.';
+        render();
+        return;
+      }
+      (d.ingredients || []).forEach(function(ing){
         if (!ing.flag){ var auto = autoFlagIngredient(ing.item); if (auto){ ing.flag = auto.flag; ing.substitute = ing.substitute || auto.substitute; } }
       });
-      saveMeal(d);
-      resetAdjustState();
-      ui.formOpen = false; ui.formDraft = null;
-      ui.importRawText = ''; ui.importSourceUrl = ''; ui.importError = null;
-      render();
+      ui.formSaving = true; ui.formError = null; render();
+      try {
+        await saveMeal(d);
+        ui.formSaving = false;
+        resetAdjustState();
+        ui.formOpen = false; ui.formDraft = null;
+        ui.importRawText = ''; ui.importSourceUrl = ''; ui.importError = null;
+        ui.toast = 'Saved';
+        render();
+        setTimeout(function(){ ui.toast = null; render(); }, 1800);
+      } catch(err){
+        // Keep the form open with everything still in it — losing the edit AND
+        // the explanation is the worst possible outcome here.
+        ui.formSaving = false;
+        ui.formError = 'Couldn’t save: ' + (err && (err.message || err.code) ? (err.message || err.code) : 'unknown error') + '. Your changes are still here — try again.';
+        render();
+      }
     }
   };
   var blurActions = {
@@ -1469,7 +1553,7 @@
   // click listener below would otherwise re-run them a second time on the same
   // interaction — double-toggling a checkbox back to its old value, or tearing a
   // text input out of the DOM mid-focus when its container re-renders).
-  var CHANGE_ACTIONS = { pdfFile:1, filterTier:1, filterSort:1, weekPickerTier:1, toggleGroceryItem:1 };
+  var CHANGE_ACTIONS = { pdfFile:1, filterTier:1, filterSort:1, weekPickerTier:1, toggleGroceryItem:1, setMealTier:1 };
   var LIVE_INPUT_ACTIONS = { importTextInput:1, importUrlInput:1, filterSearch:1, weekPickerSearch:1 };
 
   // Every handler runs through here. A throw inside one used to leave the action
