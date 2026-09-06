@@ -207,10 +207,16 @@
   .g-item:last-child{ border-bottom:none; }
   .g-item input[type="checkbox"]{ width:22px; height:22px; margin-top:1px; flex:none; accent-color:var(--olive); }
   .g-item.checked .g-name{ text-decoration:line-through; color:var(--ink-soft); }
-  .g-name{ font-weight:700; font-size:0.94rem; }
+  .g-body{ flex:1; min-width:0; }
+  .g-line{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+  .g-name{ font-weight:700; font-size:0.94rem; min-width:0; }
+  .g-total{ font-weight:700; font-size:0.86rem; white-space:nowrap; flex:none;
+    font-variant-numeric:tabular-nums; color:var(--ink); }
   .g-meta{ font-size:0.76rem; color:var(--ink-soft); }
-  .breakdown-list{ margin:3px 0 0; padding-left:16px; font-size:0.76rem; color:var(--ink-soft); }
+  .pantry-note{ margin-top:3px; }
+  .breakdown-list{ list-style:none; margin:3px 0 0; padding:0; font-size:0.76rem; color:var(--ink-soft); }
   .breakdown-list li{ margin-bottom:1px; }
+  .bd-qty{ display:inline-block; min-width:4.5em; font-variant-numeric:tabular-nums; font-weight:700; }
   .g-flag{ font-size:0.76rem; color:var(--danger); margin-top:3px; font-weight:700; }
   .toast{ position:fixed; bottom:22px; left:50%; transform:translateX(-50%); background:var(--olive); color:var(--olive-ink);
     padding:11px 20px; border-radius:999px; font-size:0.85rem; font-weight:800; box-shadow:var(--shadow-lift); z-index:50; }
@@ -430,7 +436,7 @@
     formError: null,
     formSaving: false,
     linkUrl: '', linkDraft: false, linkSaving: false, linkError: null,
-    pantryInput: '', pantrySaving: false,
+    pantryInput: '', pantrySaving: false, pantryChecking: false, pantryCheckNote: null,
     toast: null,
     copyFallbackText: null
   };
@@ -505,18 +511,36 @@
     return Promise.resolve();
   }
   function normalizePantryTerm(s){ return String(s||'').toLowerCase().trim().replace(/\s+/g,' '); }
-  // An ingredient counts as "already have it" when a pantry term matches it as a
-  // whole word — so "oil" covers "olive oil" without "soil" matching anything.
-  function isInPantry(itemName){
+  // Which pantry term covers this shopping item, or null.
+  //
+  // Three layers, in order: an explicit "not really" override always wins;
+  // then literal whole-word matching ("oil" covers "olive oil", not "soil");
+  // then any match AI found on this week's list, which is what catches the
+  // wording the literal pass can't — "chopped tomatoes" against "tinned
+  // tomatoes", "vegetable bouillon" against "stock".
+  function pantryMatchFor(itemName){
     var n = normalizePantryTerm(itemName);
-    if (!n) return false;
+    if (!n) return null;
+    var overrides = (weekDoc && weekDoc.pantryOverrides) || {};
+    if (overrides[n]) return null;
     for (var i=0;i<pantry.length;i++){
       var term = normalizePantryTerm(pantry[i]);
       if (!term) continue;
-      if (n === term) return true;
-      if (matchesKeyword(n, term)) return true;
+      if (n === term || matchesKeyword(n, term)) return pantry[i];
     }
-    return false;
+    var aiMatches = (weekDoc && weekDoc.pantryMatches) || {};
+    if (aiMatches[n]) return aiMatches[n];
+    return null;
+  }
+  function isInPantry(itemName){ return !!pantryMatchFor(itemName); }
+  // Would literal matching alone have caught this? Used only to report how many
+  // extra matches the AI pass actually contributed.
+  function matchesLiterally(itemName){
+    var n = normalizePantryTerm(itemName);
+    return pantry.some(function(p){
+      var term = normalizePantryTerm(p);
+      return term && (n === term || matchesKeyword(n, term));
+    });
   }
   function updateWeek(partial){
     var cur = weekDoc || { weekStart: mondayIso(), mealIds: [], checkedItems: {} };
@@ -670,13 +694,28 @@
       var item = combined[k];
       // Anything the household has told us it already owns is a cupboard check,
       // never a buy line — whatever the recipe's own pantryStaple flag says.
-      if (isInPantry(item.item)){ item.inPantry = true; item.pantryStaple = true; }
-      item.waste = item.meals.length === 1 && !item.pantryStaple;
+      var match = pantryMatchFor(item.item);
+      if (match){ item.inPantry = true; item.pantryMatch = match; item.pantryStaple = true; }
+      item.waste = isLikelyWaste(item);
       bySection[item.section].push(item);
     });
     SECTIONS.forEach(function(s){ bySection[s].sort(function(a,b){ return a.item.localeCompare(b.item); }); });
     return bySection;
   }
+  // "Small amount for one meal" is only worth saying when you're forced to buy a
+  // whole pack for a spoonful — a bunch of coriander for one tbsp. Used to fire on
+  // anything a single meal needed, which was almost every line and therefore noise:
+  // two tins of butter beans is not a waste risk.
+  var PARTIAL_PACK_UNITS = { tsp:1, tbsp:1, sprig:1, sprigs:1, clove:1, cloves:1, pinch:1, pinches:1, handful:1, handfuls:1, stick:1, sticks:1, leaf:1, leaves:1 };
+  function isLikelyWaste(item){
+    if (item.meals.length !== 1 || item.pantryStaple) return false;
+    var unit = String(item.unit||'').toLowerCase().trim();
+    if (PARTIAL_PACK_UNITS[unit]) return true;
+    if (!item.qtyKnown) return false;
+    if ((unit === 'g' || unit === 'ml') && item.qtyNum > 0 && item.qtyNum <= 60) return true;
+    return false;
+  }
+
   function formatBreakdownEntry(b){
     if (b.num != null){
       var n = Math.round(b.num*100)/100;
@@ -850,6 +889,27 @@
       + '"ingredients": [{"item": string, "quantity": string, "unit": string, '
       + '"section": "produce"|"protein"|"dairy-and-chilled"|"tins-and-dry-goods"|"freezer"|"other", '
       + '"pantryStaple": boolean, "flag": ' + FLAG_ENUM_STR + '|null, "substitute": string} ] }';
+  }
+
+  // Literal matching only catches the same words. This asks Claude which shopping
+  // items the household's staples actually cover — "chopped tomatoes" against
+  // "tinned tomatoes", "vegetable bouillon" against "stock" — while being clear
+  // that a near-miss is worse than a miss: telling someone they already have
+  // something they don't means the meal can't be cooked.
+  function buildPantryMatchPrompt(pantryList, itemNames){
+    return 'A household keeps a list of staples it always has in. Decide which items on this week’s '
+      + 'shopping list are already covered by those staples.\n\n'
+      + 'Match on the actual ingredient, allowing for different wording, brand, form or packaging '
+      + '("chopped tomatoes" is covered by "tinned tomatoes"; "vegetable bouillon" by "stock"; '
+      + '"extra virgin olive oil" by "olive oil").\n\n'
+      + 'Do NOT match different ingredients that merely sound alike or belong to the same family: '
+      + 'butter does not cover butter beans, plain flour does not cover cornflour, white wine vinegar '
+      + 'does not cover white wine, milk does not cover coconut milk. When you are unsure, leave it '
+      + 'out — a wrong match means they skip buying something they actually need and can’t cook the meal.\n\n'
+      + 'Pantry staples:\n' + pantryList.map(function(p){ return '- ' + p; }).join('\n') + '\n\n'
+      + 'Shopping list items:\n' + itemNames.map(function(i){ return '- ' + i; }).join('\n') + '\n\n'
+      + 'Reply with ONLY this JSON, listing just the confident matches:\n'
+      + '{ "matches": [ { "item": "<exact shopping list item>", "pantry": "<the staple that covers it>" } ] }';
   }
 
   function buildAdjustPrompt(draft, instruction){
@@ -1068,22 +1128,51 @@
     return html;
   }
 
+  // One line per item — name left, combined total right — with the per-recipe
+  // amounts listed underneath, the same way whether one meal needs it or four.
   function renderMealsLine(item){
-    if (item.meals.length > 1){
-      var lis = item.breakdown.map(function(b){
-        return '<li>'+escapeHtml(formatBreakdownEntry(b))+' for '+escapeHtml(b.meal)+'</li>';
-      }).join('');
-      return '<ul class="breakdown-list">'+lis+'</ul>';
-    }
-    return '<div class="g-meta">for '+escapeHtml(item.meals.join(', '))+(item.waste?' &middot; small amount for one meal, easy to waste':'')+'</div>';
+    var lis = (item.breakdown || []).map(function(b){
+      return '<li><span class="bd-qty">'+escapeHtml(formatBreakdownEntry(b))+'</span> '+escapeHtml(b.meal)+'</li>';
+    }).join('');
+    var html = lis ? '<ul class="breakdown-list">'+lis+'</ul>' : '';
+    if (item.waste) html += '<div class="g-meta">Small amount for one meal &mdash; easy to waste.</div>';
+    return html;
+  }
+
+  function renderGroceryRow(item, section, listKind, checked){
+    var key = listKind+'|'+section+'|'+item.item.toLowerCase();
+    var isChecked = !!checked[key];
+    return '<div class="g-item'+(isChecked?' checked':'')+'">' +
+      '<input type="checkbox" data-action="toggleGroceryItem" data-id="'+encodeURIComponent(key)+'"'+(isChecked?' checked':'')+'>' +
+      '<div class="g-body">' +
+        '<div class="g-line">' +
+          '<span class="g-name">'+escapeHtml(item.item)+
+            (item.inPantry ? ' <span class="chip in-pantry">In pantry</span>' : '')+'</span>' +
+          '<span class="g-total mono">'+escapeHtml(formatQty(item))+'</span>' +
+        '</div>' +
+        renderMealsLine(item) +
+        (item.flag ? '<div class="g-flag">'+escapeHtml(flagLabel(item.flag))+(item.substitute? ' — '+escapeHtml(item.substitute) : ' — no solid substitute, decide in the shop')+'</div>'
+          : (item.substitute ? '<div class="g-meta">Note: '+escapeHtml(item.substitute)+'</div>' : '')) +
+        (item.inPantry
+          ? '<div class="g-meta pantry-note">Covered by “'+escapeHtml(item.pantryMatch || item.item)+'” in your pantry' +
+            ' <button type="button" class="btn-link" data-action="unmatchPantryItem" data-id="'+encodeURIComponent(item.item)+'">not really</button></div>'
+          : '<button type="button" class="btn-link have-it-btn" data-action="addGroceryItemToPantry" data-id="'+encodeURIComponent(item.item)+'">I already have this</button>') +
+      '</div></div>';
   }
 
   function renderGrocerySection(picked){
     var bySection = buildGroceryList(picked);
     var checked = (weekDoc && weekDoc.checkedItems) || {};
     var html = '<div class="section-head"><h2>Grocery list</h2>' +
-      '<div class="row-actions"><button class="btn btn-forest btn-sm" data-action="copyGrocery" data-id="buy">Copy buy list</button>' +
-      '<button class="btn btn-ghost btn-sm" data-action="copyGrocery" data-id="cupboard">Copy cupboard-check</button></div></div>';
+      '<div class="row-actions">' +
+        (!sampleUnavailable
+          ? '<button class="btn btn-navy btn-sm" data-action="checkPantryWithAi"'+(ui.pantryChecking?' disabled':'')+'>'+(ui.pantryChecking?'Checking…':'Check pantry with AI')+'</button>'
+          : '') +
+        '<button class="btn btn-forest btn-sm" data-action="copyGrocery" data-id="buy">Copy buy list</button>' +
+        '<button class="btn btn-ghost btn-sm" data-action="copyGrocery" data-id="cupboard">Copy cupboard-check</button>' +
+      '</div></div>';
+
+    if (ui.pantryCheckNote) html += '<div class="warnbox info">'+escapeHtml(ui.pantryCheckNote)+'</div>';
 
     if (ui.copyFallbackText){
       html += '<div class="card copy-fallback"><div class="muted">Copy didn’t work automatically &mdash; select the text below and copy it manually.</div>' +
@@ -1099,18 +1188,7 @@
       var items = bySection[s].filter(function(i){ return !i.pantryStaple; });
       if (!items.length) return;
       html += '<div class="g-section"><h3>'+SECTION_LABELS[s]+'</h3>';
-      items.forEach(function(item){
-        var key = 'buy|'+s+'|'+item.item.toLowerCase();
-        var isChecked = !!checked[key];
-        html += '<div class="g-item'+(isChecked?' checked':'')+'">' +
-          '<input type="checkbox" data-action="toggleGroceryItem" data-id="'+encodeURIComponent(key)+'"'+(isChecked?' checked':'')+'>' +
-          '<div><div class="g-name">'+escapeHtml(item.item)+' &mdash; '+escapeHtml(formatQty(item))+'</div>' +
-          renderMealsLine(item) +
-          (item.flag ? '<div class="g-flag">'+escapeHtml(flagLabel(item.flag))+(item.substitute? ' — '+escapeHtml(item.substitute) : ' — no solid substitute, decide in the shop')+'</div>'
-            : (item.substitute ? '<div class="g-meta">Note: '+escapeHtml(item.substitute)+'</div>' : '')) +
-          '<button type="button" class="btn-link have-it-btn" data-action="addGroceryItemToPantry" data-id="'+encodeURIComponent(item.item)+'">I already have this</button>' +
-          '</div></div>';
-      });
+      items.forEach(function(item){ html += renderGroceryRow(item, s, 'buy', checked); });
       html += '</div>';
     });
     html += '</div>';
@@ -1121,18 +1199,7 @@
       var items = bySection[s].filter(function(i){ return i.pantryStaple; });
       if (!items.length) return;
       html += '<div class="g-section"><h3>'+SECTION_LABELS[s]+'</h3>';
-      items.forEach(function(item){
-        var key = 'cupboard|'+s+'|'+item.item.toLowerCase();
-        var isChecked = !!checked[key];
-        html += '<div class="g-item'+(isChecked?' checked':'')+'">' +
-          '<input type="checkbox" data-action="toggleGroceryItem" data-id="'+encodeURIComponent(key)+'"'+(isChecked?' checked':'')+'>' +
-          '<div><div class="g-name">'+escapeHtml(item.item)+' &mdash; '+escapeHtml(formatQty(item)) +
-            (item.inPantry ? ' <span class="chip in-pantry">In pantry</span>' : '') + '</div>' +
-          renderMealsLine(item) +
-          (item.flag ? '<div class="g-flag">'+escapeHtml(flagLabel(item.flag))+(item.substitute? ' — '+escapeHtml(item.substitute) : '')+'</div>'
-            : (item.substitute ? '<div class="g-meta">Note: '+escapeHtml(item.substitute)+'</div>' : '')) +
-          '</div></div>';
-      });
+      items.forEach(function(item){ html += renderGroceryRow(item, s, 'cupboard', checked); });
       html += '</div>';
     });
     html += '</div>';
@@ -1626,6 +1693,55 @@
     removePantryItem: function(el, id){
       var next = pantry.filter(function(p){ return normalizePantryTerm(p) !== normalizePantryTerm(id); });
       return savePantry(next).then(render).catch(reportActionError);
+    },
+    checkPantryWithAi: async function(){
+      if (!sampleFn || ui.pantryChecking) return;
+      if (!pantry.length){
+        ui.pantryCheckNote = 'Nothing in the pantry yet — add a few staples on the Pantry tab first.';
+        render(); return;
+      }
+      var picked = selectedMeals();
+      var bySection = buildGroceryList(picked);
+      var names = [];
+      SECTIONS.forEach(function(s){ bySection[s].forEach(function(i){ names.push(i.item); }); });
+      if (!names.length) return;
+
+      ui.pantryChecking = true; ui.pantryCheckNote = null; render();
+      try {
+        var result = await sampleFn.json(buildPantryMatchPrompt(pantry, names));
+        var found = Array.isArray(result && result.matches) ? result.matches : [];
+        var map = {};
+        var overrides = (weekDoc && weekDoc.pantryOverrides) || {};
+        var added = 0;
+        found.forEach(function(m){
+          if (!m || !m.item || !m.pantry) return;
+          var key = normalizePantryTerm(m.item);
+          // Never re-assert something they've explicitly waved off, and don't
+          // count what literal matching already had.
+          if (overrides[key]) return;
+          if (!names.some(function(n){ return normalizePantryTerm(n) === key; })) return;
+          map[key] = String(m.pantry);
+          if (!matchesLiterally(m.item)) added++;
+        });
+        ui.pantryChecking = false;
+        ui.pantryCheckNote = added
+          ? 'Matched '+added+' more item'+(added===1?'':'s')+' to your pantry. Anything wrong, hit “not really” on the line.'
+          : 'No extra matches — the list already lines up with your pantry.';
+        await updateWeek({ pantryMatches: map });
+        render();
+      } catch(e){
+        ui.pantryChecking = false;
+        ui.pantryCheckNote = sampleErrorMessage(e) || 'Couldn’t check the pantry just now.';
+        render();
+      }
+    },
+    unmatchPantryItem: function(el, id){
+      var item = decodeURIComponent(id || '');
+      var key = normalizePantryTerm(item);
+      var overrides = Object.assign({}, (weekDoc && weekDoc.pantryOverrides) || {});
+      overrides[key] = true;
+      ui.pantryCheckNote = null;
+      return updateWeek({ pantryOverrides: overrides });
     },
     // From a grocery row: "we've already got this" without leaving the list.
     addGroceryItemToPantry: function(el, id){
