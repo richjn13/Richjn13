@@ -227,41 +227,94 @@
     'cow-milk': 'Contains cow’s milk'
   };
 
+  // Flags written by earlier versions of the app, before the household rules
+  // changed. Mapped on read so old records never render as "undefined";
+  // not-vegan is dropped outright, since this household isn't vegan.
+  var LEGACY_FLAG_MAP = { 'contains-egg': 'egg-white', 'not-vegan': null };
+  function migrateFlag(flag){
+    if (!flag) return null;
+    if (Object.prototype.hasOwnProperty.call(LEGACY_FLAG_MAP, flag)) return LEGACY_FLAG_MAP[flag];
+    return flag;
+  }
+  // Never render a bare key (or "undefined") for a flag we don't have a label
+  // for — fall back to the key read as words.
+  function flagLabel(flag){
+    if (!flag) return '';
+    if (FLAG_LABELS[flag]) return FLAG_LABELS[flag];
+    var words = String(flag).replace(/[-_]+/g, ' ').trim();
+    return words.charAt(0).toUpperCase() + words.slice(1);
+  }
+
   var RESTRICTION_HINTS = [
-    // Named allergens first, most specific keyword wins.
+    // Named allergens first, most specific keyword wins. `exclude` phrases veto a
+    // rule outright — that's what keeps "butter beans" and "coconut milk" out of
+    // the dairy rule and "flax egg" out of the egg rule.
     { flag: 'flaxseed', keywords: ['flaxseed', 'flax seed', 'linseed', 'flax egg'], substitute: 'leave out or use a chia egg instead' },
     { flag: 'cashew', keywords: ['cashew'], substitute: 'swap for sunflower or pumpkin seeds, or omit' },
     { flag: 'pistachio', keywords: ['pistachio'], substitute: 'swap for sunflower or pumpkin seeds, or omit' },
     { flag: 'hazelnut', keywords: ['hazelnut', 'filbert'], substitute: 'swap for sunflower or pumpkin seeds, or omit' },
-    { flag: 'mushroom', keywords: ['mushroom', 'porcini', 'shiitake', 'portobello', 'cremini'], substitute: 'swap for extra onion/pepper or butter beans for texture, or omit' },
+    { flag: 'mushroom', keywords: ['mushroom', 'mushrooms', 'porcini', 'shiitake', 'portobello', 'cremini'], substitute: 'swap for extra onion/pepper or butter beans for texture, or omit' },
     { flag: 'gliadin', keywords: ['gliadin'], substitute: 'same as gluten-free — check for wheat-derived ingredients' },
-    { flag: 'orange', keywords: ['orange'], substitute: 'swap for lemon or another citrus if tolerated, or omit' },
+    { flag: 'orange', keywords: ['orange', 'oranges'], exclude: ['orange pepper', 'orange bell', 'orange-fleshed', 'orange sweet potato'], substitute: 'swap for lemon or another citrus if tolerated, or omit' },
     { flag: 'cuttlefish', keywords: ['cuttlefish'], substitute: 'no confident substitute — omit or ask' },
     { flag: 'brewers-yeast', keywords: ['brewer’s yeast', 'brewers yeast', "brewer's yeast"], substitute: 'check for hidden sources (some stocks, beers, spreads) — omit if present' },
     { flag: 'lobster', keywords: ['lobster'], substitute: 'no confident substitute — omit or ask' },
     // Egg white family — whole eggs carry the white, so treat "egg"/"eggs" generically as this flag.
-    { flag: 'egg-white', keywords: ['egg white', 'egg whites', 'meringue', 'egg wash', 'fresh pasta', 'mayonnaise', 'mayo', 'eggs', 'egg'], substitute: 'use aquafaba or a flax egg' },
+    { flag: 'egg-white', keywords: ['egg white', 'egg whites', 'meringue', 'egg wash', 'fresh pasta', 'mayonnaise', 'mayo', 'eggs', 'egg'],
+      exclude: ['eggplant', 'egg-free', 'egg free', 'eggless', 'flax egg', 'chia egg', 'vegan mayo'], substitute: 'use aquafaba or a flax egg' },
     // Gluten-free family.
     { flag: 'not-gluten-free', keywords: ['soy sauce'], substitute: 'use tamari' },
     { flag: 'not-gluten-free', keywords: ['stock'], substitute: 'check the label or use a certified gluten-free stock' },
-    { flag: 'not-gluten-free', keywords: ['oats'], substitute: 'use certified gluten-free oats' },
+    { flag: 'not-gluten-free', keywords: ['oats'], exclude: ['gluten-free oats', 'gluten free oats'], substitute: 'use certified gluten-free oats' },
     { flag: 'not-gluten-free', keywords: ['gnocchi'], substitute: 'use gluten-free gnocchi' },
-    { flag: 'not-gluten-free', keywords: ['pasta', 'noodles'], substitute: 'use gluten-free pasta' },
-    { flag: 'not-gluten-free', keywords: ['tortilla'], substitute: 'use corn or gluten-free tortillas' },
+    { flag: 'not-gluten-free', keywords: ['pasta', 'noodles'], exclude: ['gluten-free pasta', 'gluten free pasta', 'rice noodles', 'glass noodles'], substitute: 'use gluten-free pasta' },
+    { flag: 'not-gluten-free', keywords: ['tortilla', 'tortillas'], exclude: ['corn tortilla'], substitute: 'use corn or gluten-free tortillas' },
     { flag: 'not-gluten-free', keywords: ['breadcrumbs'], substitute: 'use gluten-free breadcrumbs or crushed rice cakes' },
     { flag: 'not-gluten-free', keywords: ['spice blend'], substitute: 'check the label — some blends use wheat as a filler' },
-    { flag: 'not-gluten-free', keywords: ['sauce'], substitute: 'check the label — some sauces sneak in wheat' },
+    { flag: 'not-gluten-free', keywords: ['sauce'], exclude: ['tomato sauce', 'apple sauce', 'applesauce', 'cranberry sauce'], substitute: 'check the label — some sauces sneak in wheat' },
     // Cow's milk / dairy family — broadest net, checked last.
-    { flag: 'cow-milk', keywords: ['cheese', 'yogurt', 'buttermilk', 'cream', 'butter', 'milk'], substitute: 'use a plant-based version (oat, soy or almond)' }
+    { flag: 'cow-milk', keywords: ['cheese', 'yogurt', 'yoghurt', 'buttermilk', 'cream', 'butter', 'milk'],
+      exclude: [
+        'butternut', 'butter bean', 'butter lettuce', 'peanut butter', 'almond butter', 'cashew butter',
+        'sunflower butter', 'seed butter', 'nut butter', 'cocoa butter', 'shea butter', 'apple butter',
+        'vegan butter', 'dairy-free butter', 'coconut milk', 'coconut cream', 'coconut yogurt', 'oat milk',
+        'almond milk', 'soy milk', 'soya milk', 'rice milk', 'hemp milk', 'cashew milk', 'plant milk',
+        'plant-based milk', 'non-dairy', 'dairy-free', 'dairy free', 'cream of tartar', 'vegan cheese',
+        'milk thistle'
+      ],
+      substitute: 'use a plant-based version (oat, soy or almond)' }
   ];
 
+  // Flag <option> list, including any value already on the ingredient that isn't
+  // one of ours, so an unrecognized flag survives an edit instead of being reset.
+  function flagOptions(current){
+    var keys = Object.keys(FLAG_LABELS);
+    if (current && keys.indexOf(current) === -1) keys.push(current);
+    return keys.map(function(fl){
+      return '<option value="'+escapeHtml(fl)+'"'+(current===fl?' selected':'')+'>'+escapeHtml(flagLabel(fl))+'</option>';
+    }).join('');
+  }
+
+  // Whole-word match, so "butternut squash" isn't butter and "eggplant" isn't egg.
+  function matchesKeyword(name, keyword){
+    var esc = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp('(^|[^a-z])' + esc + '([^a-z]|$)', 'i').test(name);
+  }
+
   function autoFlagIngredient(name){
-    var n = (name||'').toLowerCase();
-    if (!n.trim()) return null;
+    var n = (name||'').toLowerCase().trim();
+    if (!n) return null;
     for (var i=0;i<RESTRICTION_HINTS.length;i++){
       var rule = RESTRICTION_HINTS[i];
+      var vetoed = false;
+      if (rule.exclude){
+        for (var x=0;x<rule.exclude.length;x++){
+          if (n.indexOf(rule.exclude[x]) !== -1){ vetoed = true; break; }
+        }
+      }
+      if (vetoed) continue;
       for (var j=0;j<rule.keywords.length;j++){
-        if (n.indexOf(rule.keywords[j]) !== -1) return { flag: rule.flag, substitute: rule.substitute };
+        if (matchesKeyword(n, rule.keywords[j])) return { flag: rule.flag, substitute: rule.substitute };
       }
     }
     return null;
@@ -314,7 +367,7 @@
           unit: typeof i.unit === 'string' ? i.unit : '',
           section: SECTIONS.indexOf(i.section) !== -1 ? i.section : 'other',
           pantryStaple: !!i.pantryStaple,
-          flag: i.flag || null,
+          flag: migrateFlag(i.flag),
           substitute: typeof i.substitute === 'string' ? i.substitute : ''
         };
       }) : [],
@@ -344,6 +397,7 @@
     confirmDeleteId: null,
     confirmNewWeek: false,
     confirmAutoPick: false,
+    actionError: null,
     toast: null,
     copyFallbackText: null
   };
@@ -573,7 +627,8 @@
           ? item.breakdown.map(function(b){ return formatBreakdownEntry(b)+' for '+b.meal; }).join(', ')
           : item.meals.join(', ');
         var line = item.item+' — '+formatQty(item)+' ('+detail+')';
-        if (item.flag) line += ' [' + FLAG_LABELS[item.flag] + (item.substitute? ': '+item.substitute:'') + ']';
+        if (item.flag) line += ' [' + flagLabel(item.flag) + (item.substitute? ': '+item.substitute:'') + ']';
+        else if (item.substitute) line += ' [note: ' + item.substitute + ']';
         lines.push(line);
       });
     });
@@ -631,7 +686,7 @@
   }
   function mapIngredients(list){
     return Array.isArray(list) ? list.map(function(i){
-      var flag = i.flag, sub = i.substitute || '';
+      var flag = migrateFlag(i.flag), sub = i.substitute || '';
       if (!flag){ var auto = autoFlagIngredient(i.item); if (auto){ flag = auto.flag; sub = sub || auto.substitute; } }
       return { item: i.item||'', quantity: String(i.quantity!=null?i.quantity:''), unit: i.unit||'', section: SECTIONS.indexOf(i.section)!==-1 ? i.section : 'other', pantryStaple: !!i.pantryStaple, flag: flag||null, substitute: sub };
     }) : [];
@@ -688,11 +743,20 @@
   // restore focus by element id across the rebuild so typing stays uninterrupted.
   function render(){
     var app = document.getElementById('app');
-    var active = document.activeElement;
     var focusInfo = null;
-    if (active && app.contains(active) && active.id){
-      focusInfo = { id: active.id, start: active.selectionStart, end: active.selectionEnd };
-    }
+    // Reading selectionStart/End THROWS (InvalidStateError) when the focused
+    // element is an input type that has no text selection — number and date,
+    // both of which the meal form uses (servings, effort minutes, times cooked,
+    // last cooked). Unguarded, that aborts the whole render and freezes the page
+    // on exactly the screen you're most likely to be typing in.
+    try {
+      var active = document.activeElement;
+      if (active && app.contains(active) && active.id){
+        var selStart = null, selEnd = null;
+        try { selStart = active.selectionStart; selEnd = active.selectionEnd; } catch(e){}
+        focusInfo = { id: active.id, start: selStart, end: selEnd };
+      }
+    } catch(e){ focusInfo = null; }
     // If the meal form is already on screen, capture whatever's typed into it before
     // rebuilding — a re-render can be triggered by the OTHER person's edit arriving
     // over the shared db, not just a local click, and that must never erase typing
@@ -734,7 +798,7 @@
     if (focusInfo){
       var el = document.getElementById(focusInfo.id);
       if (el){
-        el.focus();
+        try { el.focus(); } catch(e){}
         if (typeof focusInfo.start === 'number' && el.setSelectionRange){
           try { el.setSelectionRange(focusInfo.start, focusInfo.end); } catch(e){}
         }
@@ -747,7 +811,12 @@
       '<div class="topbar"><div class="brand"><h1>Meal Planner</h1><span class="tag mono">household kitchen ops</span></div></div>' +
       '<div class="tabs">' +
         tabBtn('week','This Week') + tabBtn('meals','Meals') + tabBtn('import','Import') +
-      '</div>';
+      '</div>' +
+      (ui.actionError
+        ? '<div class="warnbox warn" style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">' +
+          '<span>That didn’t go through: '+escapeHtml(ui.actionError)+'</span>' +
+          '<button class="btn-link" data-action="dismissActionError">Dismiss</button></div>'
+        : '');
   }
   function tabBtn(key, label){
     return '<button class="tab'+(currentTab===key?' active':'')+'" data-action="setTab" data-id="'+key+'">'+label+'</button>';
@@ -870,7 +939,8 @@
           '<input type="checkbox" data-action="toggleGroceryItem" data-id="'+encodeURIComponent(key)+'"'+(isChecked?' checked':'')+'>' +
           '<div><div class="g-name">'+escapeHtml(item.item)+' &mdash; '+escapeHtml(formatQty(item))+'</div>' +
           renderMealsLine(item) +
-          (item.flag ? '<div class="g-flag">'+FLAG_LABELS[item.flag]+(item.substitute? ' — '+escapeHtml(item.substitute) : ' — no solid substitute, decide in the shop')+'</div>' : '') +
+          (item.flag ? '<div class="g-flag">'+escapeHtml(flagLabel(item.flag))+(item.substitute? ' — '+escapeHtml(item.substitute) : ' — no solid substitute, decide in the shop')+'</div>'
+            : (item.substitute ? '<div class="g-meta">Note: '+escapeHtml(item.substitute)+'</div>' : '')) +
           '</div></div>';
       });
       html += '</div>';
@@ -890,7 +960,8 @@
           '<input type="checkbox" data-action="toggleGroceryItem" data-id="'+encodeURIComponent(key)+'"'+(isChecked?' checked':'')+'>' +
           '<div><div class="g-name">'+escapeHtml(item.item)+' &mdash; '+escapeHtml(formatQty(item))+'</div>' +
           renderMealsLine(item) +
-          (item.flag ? '<div class="g-flag">'+FLAG_LABELS[item.flag]+(item.substitute? ' — '+escapeHtml(item.substitute) : '')+'</div>' : '') +
+          (item.flag ? '<div class="g-flag">'+escapeHtml(flagLabel(item.flag))+(item.substitute? ' — '+escapeHtml(item.substitute) : '')+'</div>'
+            : (item.substitute ? '<div class="g-meta">Note: '+escapeHtml(item.substitute)+'</div>' : '')) +
           '</div></div>';
       });
       html += '</div>';
@@ -988,7 +1059,8 @@
         return '<li>' +
           '<span>'+escapeHtml(ing.item||'')+(qty ? ' — '+escapeHtml(qty) : '')+'</span>' +
           (ing.pantryStaple ? ' <span class="muted">(pantry staple)</span>' : '') +
-          (ing.flag ? '<div class="g-flag">'+FLAG_LABELS[ing.flag]+(ing.substitute ? ' — '+escapeHtml(ing.substitute) : '')+'</div>' : '') +
+          (ing.flag ? '<div class="g-flag">'+escapeHtml(flagLabel(ing.flag))+(ing.substitute ? ' — '+escapeHtml(ing.substitute) : '')+'</div>'
+            : (ing.substitute ? '<div class="g-meta">Note: '+escapeHtml(ing.substitute)+'</div>' : '')) +
         '</li>';
       }).join('') + '</ul>';
     } else {
@@ -1112,7 +1184,7 @@
         '<input type="text" data-field="unit" placeholder="Unit" value="'+escapeHtml(r.unit)+'">' +
         '<select data-field="section">' + SECTIONS.map(function(s){ return '<option value="'+s+'"'+(r.section===s?' selected':'')+'>'+SECTION_LABELS[s]+'</option>'; }).join('') + '</select>' +
         '<label style="display:flex;align-items:center;gap:4px;font-size:0.72rem;" title="Check the cupboard first, don’t add to buy list"><input type="checkbox" data-field="pantryStaple"'+(r.pantryStaple?' checked':'')+'> staple</label>' +
-        '<select data-field="flag"><option value="">No flag</option>' + Object.keys(FLAG_LABELS).map(function(fl){ return '<option value="'+fl+'"'+(r.flag===fl?' selected':'')+'>'+FLAG_LABELS[fl]+'</option>'; }).join('') + '</select>' +
+        '<select data-field="flag"><option value="">No flag</option>' + flagOptions(r.flag) + '</select>' +
         '<button type="button" class="btn-link" data-action="removeIngredientRow" data-id="'+i+'">remove</button>' +
         (r.flag ? '<input type="text" data-field="substitute" placeholder="Substitute" value="'+escapeHtml(r.substitute)+'" style="grid-column:1 / -1;">' : '') +
       '</div>';
@@ -1178,9 +1250,11 @@
 
   var actions = {
     setTab: function(el, id){ currentTab = id; ui.weekPickerOpen=false; render(); },
+    dismissActionError: function(){ ui.actionError = null; render(); },
     recoverFromError: function(){
       ui.formOpen = false; ui.formDraft = null; ui.weekPickerOpen = false; ui.expandedMealId = null;
       ui.confirmDeleteId = null; ui.confirmNewWeek = false; ui.confirmAutoPick = false;
+      ui.actionError = null;
       currentTab = 'week';
       render();
     },
@@ -1382,8 +1456,10 @@
       if (auto && ui.formDraft){
         var i = parseInt(row.getAttribute('data-row-index'),10);
         syncFormDraftFromDom();
-        ui.formDraft.ingredients[i].flag = auto.flag;
-        ui.formDraft.ingredients[i].substitute = ui.formDraft.ingredients[i].substitute || auto.substitute;
+        var target = ui.formDraft.ingredients && ui.formDraft.ingredients[i];
+        if (!target) return;
+        target.flag = auto.flag;
+        target.substitute = target.substitute || auto.substitute;
         render();
       }
     }
@@ -1396,40 +1472,60 @@
   var CHANGE_ACTIONS = { pdfFile:1, filterTier:1, filterSort:1, weekPickerTier:1, toggleGroceryItem:1 };
   var LIVE_INPUT_ACTIONS = { importTextInput:1, importUrlInput:1, filterSearch:1, weekPickerSearch:1 };
 
+  // Every handler runs through here. A throw inside one used to leave the action
+  // half-done with no re-render — the app just stopped responding, with the real
+  // error only visible in a console nobody has open on a phone. Now it surfaces.
+  function runAction(fn, el, id, e){
+    try {
+      var result = fn(el, id, null, e);
+      if (result && typeof result.catch === 'function') result.catch(reportActionError);
+    } catch(err){
+      reportActionError(err);
+    }
+  }
+  function reportActionError(err){
+    ui.actionError = (err && err.message) ? err.message : String(err);
+    try { render(); } catch(e){}
+  }
+
   document.getElementById('app').addEventListener('click', function(e){
     var el = e.target.closest('[data-action]');
     if (!el) return;
     var action = el.getAttribute('data-action');
     if (!actions[action] || CHANGE_ACTIONS[action] || LIVE_INPUT_ACTIONS[action]) return;
-    actions[action](el, el.getAttribute('data-id'), null, e);
+    runAction(actions[action], el, el.getAttribute('data-id'), e);
   });
   document.getElementById('app').addEventListener('change', function(e){
     var el = e.target.closest('[data-action]');
     if (!el) return;
     var action = el.getAttribute('data-action');
-    if (CHANGE_ACTIONS[action] && actions[action]) actions[action](el, el.getAttribute('data-id'), null, e);
+    if (CHANGE_ACTIONS[action] && actions[action]) runAction(actions[action], el, el.getAttribute('data-id'), e);
   });
   document.getElementById('app').addEventListener('input', function(e){
     var el = e.target.closest('[data-action]');
     if (!el) return;
     var action = el.getAttribute('data-action');
-    if (LIVE_INPUT_ACTIONS[action] && actions[action]) actions[action](el);
+    if (LIVE_INPUT_ACTIONS[action] && actions[action]) runAction(actions[action], el, el.getAttribute('data-id'), e);
   });
   document.getElementById('app').addEventListener('blur', function(e){
     var el = e.target.closest('[data-action-blur]');
     if (!el) return;
     var action = el.getAttribute('data-action-blur');
-    if (blurActions[action]) blurActions[action](el);
+    if (blurActions[action]) runAction(blurActions[action], el, null, e);
   }, true);
   document.getElementById('app').addEventListener('submit', function(e){
     var el = e.target.closest('[data-action]');
     if (!el) return;
+    // Always stop the native submit first. If the handler below were missing or
+    // threw before its own preventDefault, the browser would navigate the frame
+    // away from the app — indistinguishable from a crash.
+    e.preventDefault();
     var action = el.getAttribute('data-action');
-    if (actions[action]) actions[action](el, null, null, e);
+    if (actions[action]) runAction(actions[action], el, null, e);
   });
   document.getElementById('app').addEventListener('mousedown', function(e){
-    if (e.target.id === 'form-overlay') actions.closeForm();
-    if (e.target.id === 'week-picker-overlay') actions.closeWeekPicker();
+    if (e.target.id === 'form-overlay') runAction(actions.closeForm, e.target, null, e);
+    if (e.target.id === 'week-picker-overlay') runAction(actions.closeWeekPicker, e.target, null, e);
   });
 
   render();
