@@ -1,0 +1,1061 @@
+<title>Meal Planner</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700;9..144,900&family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+<style>
+  :root{
+    --paper: #F3F5EE;
+    --card: #FCFDFA;
+    --card-2: #F7F9F2;
+    --ink: #1F2A22;
+    --ink-soft: #57634F;
+    --line: #DAE1CE;
+    --accent: #C24A34;
+    --accent-ink: #FFF8F3;
+    --accent-2: #C98A1F;
+    --forest: #2F5233;
+    --forest-ink: #EAF1E7;
+    --danger: #A62A2A;
+    --shadow: 0 1px 2px rgba(31,42,34,0.06), 0 8px 24px -12px rgba(31,42,34,0.18);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper: #161B15; --card: #1E241C; --card-2: #232A20;
+      --ink: #ECEFE5; --ink-soft: #A5AF9A; --line: #333C2E;
+      --accent: #E1684E; --accent-ink: #241008; --accent-2: #E9BE5B;
+      --forest: #7CB187; --forest-ink: #10190F; --danger: #E58A8A;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper: #161B15; --card: #1E241C; --card-2: #232A20;
+    --ink: #ECEFE5; --ink-soft: #A5AF9A; --line: #333C2E;
+    --accent: #E1684E; --accent-ink: #241008; --accent-2: #E9BE5B;
+    --forest: #7CB187; --forest-ink: #10190F; --danger: #E58A8A;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+  }
+
+  *{box-sizing:border-box;}
+  body{ background:var(--paper); color:var(--ink); font-family:"Archivo", ui-sans-serif, system-ui, sans-serif; line-height:1.45; }
+  h1,h2,h3,h4{ font-family:"Fraunces", Georgia, serif; text-wrap:balance; margin:0; }
+  .mono{ font-family:"JetBrains Mono", ui-monospace, monospace; letter-spacing:0.03em; }
+  .wrap{ max-width:1000px; margin:0 auto; padding:24px 16px 80px; }
+  a{color:inherit;}
+  button, input, select, textarea{ font-family:inherit; }
+  :focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  @media (prefers-reduced-motion: reduce){ *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;} }
+
+  .topbar{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; padding-bottom:14px; margin-bottom:16px; border-bottom:1px solid var(--line); }
+  .brand{display:flex; align-items:baseline; gap:10px;}
+  .brand h1{font-size:1.5rem; font-weight:700; color:var(--forest);}
+  .brand .tag{font-size:0.65rem; text-transform:uppercase; color:var(--ink-soft);}
+
+  .tabs{ display:flex; gap:4px; margin-bottom:20px; border-bottom:1px solid var(--line); }
+  .tab{ background:none; border:none; padding:10px 14px; font-size:0.88rem; font-weight:600; color:var(--ink-soft); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; }
+  .tab.active{ color:var(--accent); border-bottom-color:var(--accent); }
+  .tab:hover{ color:var(--accent); }
+
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); padding:18px; }
+  .hero{ text-align:center; display:flex; flex-direction:column; align-items:center; gap:14px; padding:44px 28px; }
+  .hero h2{font-size:1.7rem; max-width:22ch;}
+  .hero p{max-width:48ch; color:var(--ink-soft); font-size:0.95rem;}
+  .eyebrow{ font-size:0.68rem; text-transform:uppercase; color:var(--accent-2); font-weight:700; }
+
+  .btn{ border:none; border-radius:10px; padding:10px 18px; font-size:0.88rem; font-weight:600; cursor:pointer; }
+  .btn-primary{ background:var(--accent); color:var(--accent-ink); box-shadow:0 6px 16px -8px rgba(194,74,52,0.5); }
+  .btn-primary:hover{ filter:brightness(1.06); }
+  .btn-forest{ background:var(--forest); color:var(--forest-ink); }
+  .btn-ghost{ background:transparent; border:1px solid var(--line); color:var(--ink-soft); }
+  .btn-ghost:hover{ border-color:var(--accent); color:var(--accent); }
+  .btn-danger{ background:transparent; border:1px solid var(--danger); color:var(--danger); }
+  .btn-sm{ padding:6px 12px; font-size:0.78rem; border-radius:8px; }
+  .btn-link{ background:none; border:none; color:var(--ink-soft); text-decoration:underline; cursor:pointer; padding:0; font-size:0.8rem; }
+  .btn-link:hover{ color:var(--accent); }
+  .btn[disabled]{ opacity:0.55; cursor:default; }
+  .row-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+
+  .section-head{ display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+  .section-head h2{font-size:1.3rem;}
+  .muted{ color:var(--ink-soft); font-size:0.85rem; }
+
+  .chip{ font-size:0.62rem; text-transform:uppercase; padding:3px 8px; border-radius:999px; font-weight:700; white-space:nowrap; }
+  .chip.tier-often{background:#E4EFD9; color:#3C6B2A;}
+  .chip.tier-sometimes{background:#DCEEE9; color:#1F6E5C;}
+  .chip.tier-rarely{background:#F3E1D2; color:#8A4A1E;}
+  .chip.tier-unranked{background:#EDEDED; color:#5A5A5A;}
+  .chip.lunch-strong{background:#DCEEE9; color:#1F6E5C;}
+  .chip.lunch-ok{background:#F2EAD2; color:#7A6412;}
+  .chip.lunch-weak{background:#F3E1D2; color:#8A4A1E;}
+  .chip.flag{ background:#FBE0E6; color:#A62A4C; }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]) .chip.tier-often{background:#233B1C; color:#B4DE9C;}
+    :root:not([data-theme="light"]) .chip.tier-sometimes{background:#163530; color:#8FD6C4;}
+    :root:not([data-theme="light"]) .chip.tier-rarely{background:#3B2617; color:#EAB988;}
+    :root:not([data-theme="light"]) .chip.tier-unranked{background:#2C2C2C; color:#C7C7C7;}
+    :root:not([data-theme="light"]) .chip.lunch-strong{background:#163530; color:#8FD6C4;}
+    :root:not([data-theme="light"]) .chip.lunch-ok{background:#332B12; color:#E0CE86;}
+    :root:not([data-theme="light"]) .chip.lunch-weak{background:#3B2617; color:#EAB988;}
+    :root:not([data-theme="light"]) .chip.flag{background:#3A1C24; color:#F0A9BC;}
+  }
+  :root[data-theme="dark"] .chip.tier-often{background:#233B1C; color:#B4DE9C;}
+  :root[data-theme="dark"] .chip.tier-sometimes{background:#163530; color:#8FD6C4;}
+  :root[data-theme="dark"] .chip.tier-rarely{background:#3B2617; color:#EAB988;}
+  :root[data-theme="dark"] .chip.tier-unranked{background:#2C2C2C; color:#C7C7C7;}
+  :root[data-theme="dark"] .chip.lunch-strong{background:#163530; color:#8FD6C4;}
+  :root[data-theme="dark"] .chip.lunch-ok{background:#332B12; color:#E0CE86;}
+  :root[data-theme="dark"] .chip.lunch-weak{background:#3B2617; color:#EAB988;}
+  :root[data-theme="dark"] .chip.flag{background:#3A1C24; color:#F0A9BC;}
+
+  /* meals list */
+  .filters{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+  .filters select, .filters input[type="search"]{ border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:8px; padding:8px 10px; font-size:0.82rem; }
+  .meal-list{ display:flex; flex-direction:column; gap:8px; }
+  .meal-row{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  .meal-row .m-name{ font-family:"Fraunces", serif; font-weight:600; font-size:1.02rem; }
+  .meal-row .m-meta{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:4px; }
+  .meal-row .m-info{ flex:1; min-width:200px; }
+  .empty-state{ text-align:center; padding:40px 20px; color:var(--ink-soft); }
+
+  /* form */
+  .field{ margin-bottom:12px; }
+  .field label{ display:block; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-soft); margin-bottom:4px; }
+  .field input[type="text"], .field input[type="number"], .field input[type="date"], .field input[type="url"], .field select, .field textarea{
+    width:100%; border:1px solid var(--line); background:var(--paper); color:var(--ink); border-radius:8px; padding:9px 10px; font-size:0.9rem;
+  }
+  .field textarea{ min-height:90px; resize:vertical; }
+  .grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:640px){ .grid-2{ grid-template-columns:1fr; } }
+  fieldset{ border:1px solid var(--line); border-radius:12px; padding:14px; margin:0 0 16px; }
+  legend{ font-size:0.78rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-soft); padding:0 6px; }
+  .sub-row{ display:grid; grid-template-columns: 1.4fr 0.7fr 0.7fr 1fr auto 1fr auto; gap:6px; align-items:center; margin-bottom:8px; }
+  .sub-row input, .sub-row select{ border:1px solid var(--line); background:var(--paper); color:var(--ink); border-radius:6px; padding:7px 8px; font-size:0.8rem; width:100%; }
+  @media (max-width:800px){ .sub-row{ grid-template-columns:1fr 1fr; } }
+  .diet-row{ display:grid; grid-template-columns:1fr 1fr auto; gap:6px; margin-bottom:8px; }
+  .diet-row input{ border:1px solid var(--line); background:var(--paper); color:var(--ink); border-radius:6px; padding:7px 8px; font-size:0.8rem; }
+  .form-actions{ display:flex; justify-content:space-between; gap:10px; margin-top:16px; flex-wrap:wrap; }
+
+  /* import */
+  .import-modes{ display:flex; gap:8px; margin-bottom:14px; }
+  .import-modes .btn.active{ background:var(--forest); color:var(--forest-ink); }
+  .drop-note{ font-size:0.8rem; color:var(--ink-soft); margin-top:6px; }
+
+  /* overlay / picker */
+  .overlay{ position:fixed; inset:0; background:rgba(20,24,18,0.45); display:flex; align-items:flex-end; justify-content:center; z-index:30; }
+  @media (min-width:640px){ .overlay{ align-items:center; padding:20px; } }
+  .sheet{ background:var(--card); width:100%; max-width:640px; max-height:88vh; overflow-y:auto; border-radius:18px 18px 0 0; padding:20px 20px 26px; box-shadow:var(--shadow); }
+  @media (min-width:640px){ .sheet{ border-radius:18px; } }
+  .sheet-head{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; }
+  .close-x{ background:none; border:none; color:var(--ink-soft); font-size:1.3rem; line-height:1; cursor:pointer; }
+  .close-x:hover{ color:var(--accent); }
+  .pick-option{ width:100%; display:flex; justify-content:space-between; align-items:center; gap:10px; background:transparent; border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:7px; cursor:pointer; text-align:left; color:var(--ink); }
+  .pick-option:hover{ border-color:var(--accent); background:rgba(194,74,52,0.06); }
+
+  /* week */
+  .slots{ display:flex; flex-direction:column; gap:10px; margin-bottom:16px; }
+  .slot{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+  .slot-empty-btn{ flex:1; border:1.5px dashed var(--line); border-radius:10px; background:none; color:var(--ink-soft); padding:14px; cursor:pointer; text-align:center; font-size:0.85rem; }
+  .slot-empty-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .loose-note{ font-size:0.82rem; color:var(--ink-soft); text-align:center; margin-bottom:16px; }
+  .warnbox{ border-radius:12px; padding:12px 14px; margin-bottom:14px; font-size:0.85rem; }
+  .warnbox.warn{ background:#FBE0E6; color:#7A1F35; }
+  .warnbox.info{ background:#DCEEE9; color:#1B4F42; }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]) .warnbox.warn{ background:#3A1C24; color:#F0A9BC; }
+    :root:not([data-theme="light"]) .warnbox.info{ background:#163530; color:#8FD6C4; }
+  }
+  :root[data-theme="dark"] .warnbox.warn{ background:#3A1C24; color:#F0A9BC; }
+  :root[data-theme="dark"] .warnbox.info{ background:#163530; color:#8FD6C4; }
+  .warnbox ul{ margin:4px 0 0; padding-left:18px; }
+
+  /* grocery */
+  .g-section{ margin-bottom:18px; }
+  .g-section h3{ font-size:0.95rem; display:flex; justify-content:space-between; align-items:center; gap:10px; border-bottom:1px solid var(--line); padding-bottom:6px; margin-bottom:8px; }
+  .g-item{ display:flex; align-items:flex-start; gap:10px; padding:8px 4px; border-bottom:1px solid var(--line); }
+  .g-item:last-child{ border-bottom:none; }
+  .g-item input[type="checkbox"]{ width:20px; height:20px; margin-top:2px; flex:none; accent-color:var(--accent); }
+  .g-item.checked .g-name{ text-decoration:line-through; color:var(--ink-soft); }
+  .g-name{ font-weight:600; font-size:0.92rem; }
+  .g-meta{ font-size:0.76rem; color:var(--ink-soft); }
+  .g-flag{ font-size:0.76rem; color:var(--danger); margin-top:2px; }
+  .toast{ position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--forest); color:var(--forest-ink); padding:10px 18px; border-radius:999px; font-size:0.85rem; box-shadow:var(--shadow); z-index:50; }
+  .copy-fallback textarea{ width:100%; min-height:120px; margin-top:8px; border:1px solid var(--line); border-radius:8px; padding:8px; background:var(--paper); color:var(--ink); font-family:"JetBrains Mono", monospace; font-size:0.78rem; }
+
+  .footnote{ margin-top:26px; text-align:center; font-size:0.75rem; color:var(--ink-soft); }
+</style>
+
+<div class="wrap" id="app"></div>
+
+<script>
+(function(){
+  // ---------- constants ----------
+  var SECTIONS = ['produce','protein','dairy-and-chilled','tins-and-dry-goods','freezer','other'];
+  var SECTION_LABELS = { 'produce':'Produce', 'protein':'Protein', 'dairy-and-chilled':'Dairy & chilled', 'tins-and-dry-goods':'Tins & dry goods', 'freezer':'Freezer', 'other':'Everything else' };
+  var TIERS = ['often','sometimes','rarely','unranked'];
+  var TIER_LABELS = { often:'Often', sometimes:'Sometimes', rarely:'Rarely', unranked:'Unranked' };
+  var LUNCH_LABELS = { strong:'Strong lunch', ok:'OK lunch', weak:'Weak lunch' };
+  var FLAG_LABELS = { 'not-gluten-free':'Not gluten-free', 'not-vegan':'Not vegan', 'contains-egg':'Contains egg' };
+
+  var GLUTEN_HINTS = [
+    ['soy sauce', 'use tamari'],
+    ['stock', 'check the label or use a certified gluten-free stock'],
+    ['oats', 'use certified gluten-free oats'],
+    ['gnocchi', 'use gluten-free gnocchi'],
+    ['pasta', 'use gluten-free pasta'],
+    ['tortilla', 'use corn or gluten-free tortillas'],
+    ['breadcrumbs', 'use gluten-free breadcrumbs or crushed rice cakes'],
+    ['spice blend', 'check the label — some blends use wheat as a filler'],
+    ['sauce', 'check the label — some sauces sneak in wheat']
+  ];
+  var EGG_HINTS = [
+    ['mayonnaise', 'use a vegan mayo'],
+    ['mayo', 'use a vegan mayo'],
+    ['egg wash', 'brush with plant milk instead'],
+    ['fresh pasta', 'use dried egg-free pasta or gluten-free pasta'],
+    ['eggs', 'leave out or use a flax egg'],
+    ['egg', 'leave out or use a flax egg']
+  ];
+  var ANIMAL_HINTS = [
+    ['chicken', 'swap for butter beans, chickpeas or tofu'],
+    ['beef', 'swap for lentils or a plant mince'],
+    ['pork', 'swap for jackfruit or tempeh'],
+    ['bacon', 'swap for smoked tempeh or mushroom bacon'],
+    ['salmon', 'swap for a marinated tofu fillet'],
+    ['shrimp', 'swap for king oyster mushrooms'],
+    ['prawns', 'swap for king oyster mushrooms'],
+    ['fish', 'swap for marinated tofu or hearts of palm'],
+    ['cheese', 'use a dairy-free cheese'],
+    ['yogurt', 'use a coconut or soy yogurt'],
+    ['cream', 'use oat cream or coconut cream'],
+    ['milk', 'use oat or soy milk'],
+    ['butter', 'use a dairy-free butter or olive oil'],
+    ['honey', 'use maple syrup or agave']
+  ];
+
+  function autoFlagIngredient(name){
+    var n = (name||'').toLowerCase();
+    if (!n.trim()) return null;
+    for (var i=0;i<EGG_HINTS.length;i++){ if (n.indexOf(EGG_HINTS[i][0])!==-1) return { flag:'contains-egg', substitute:EGG_HINTS[i][1] }; }
+    for (var j=0;j<GLUTEN_HINTS.length;j++){ if (n.indexOf(GLUTEN_HINTS[j][0])!==-1) return { flag:'not-gluten-free', substitute:GLUTEN_HINTS[j][1] }; }
+    for (var k=0;k<ANIMAL_HINTS.length;k++){ if (n.indexOf(ANIMAL_HINTS[k][0])!==-1) return { flag:'not-vegan', substitute:ANIMAL_HINTS[k][1] }; }
+    return null;
+  }
+
+  function escapeHtml(s){
+    return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; });
+  }
+  function uid(){ return 'id'+Date.now()+Math.random().toString(16).slice(2); }
+  function daysSince(dateStr){ if (!dateStr) return Infinity; var d = new Date(dateStr+'T00:00:00'); if (isNaN(d.getTime())) return Infinity; return Math.floor((Date.now()-d.getTime())/86400000); }
+  function todayIso(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function mondayIso(){
+    var d = new Date(); var day = d.getDay(); var diff = (day===0?-6:1-day);
+    d.setDate(d.getDate()+diff); d.setHours(0,0,0,0);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
+  function blankMeal(){
+    return { id:null, name:'', base:'', effort:'', effortMinutes:'', tier:'unranked', servings:4, method:'', notes:'', sourceUrl:'', lunchQuality:'ok', dietFlags:[], ingredients:[], lastCooked:'', timesCooked:0 };
+  }
+  function newIngredient(){ return { item:'', quantity:'', unit:'', section:'other', pantryStaple:false, flag:null, substitute:'' }; }
+  function newDietFlag(){ return { rule:'', substitute:'' }; }
+
+  // ---------- state ----------
+  var currentTab = 'week';
+  var meals = [];
+  var weekDoc = null; // { weekStart, mealIds:[], checkedItems:{} }
+  var db = null, sampleFn = null, localMode = false, sampleUnavailable = false;
+  var dataLoaded = false;
+  var ui = {
+    formOpen: false,
+    formDraft: null,
+    weekPickerOpen: false,
+    weekPickerSearch: '',
+    weekPickerFilterTier: '',
+    mealsFilter: { tier:'', search:'', lunch:'', sort:'name' },
+    importRawText: '', importSourceUrl: '', importDraft: null, importExtracting:false, importError:null, importPdfReading:false,
+    confirmDeleteId: null,
+    toast: null,
+    copyFallbackText: null
+  };
+
+  // ---------- storage: db capability, falls back to localStorage ----------
+  var LS_MEALS = 'mp_meals_v1', LS_WEEK = 'mp_week_v1';
+  function localGetMeals(){ try { return JSON.parse(localStorage.getItem(LS_MEALS)||'[]'); } catch(e){ return []; } }
+  function localSaveMeals(list){ localStorage.setItem(LS_MEALS, JSON.stringify(list)); meals = list; render(); }
+  function localGetWeek(){ try { return JSON.parse(localStorage.getItem(LS_WEEK)||'null'); } catch(e){ return null; } }
+  function localSaveWeek(w){ localStorage.setItem(LS_WEEK, JSON.stringify(w)); weekDoc = w; render(); }
+
+  function saveMeal(meal){
+    var toWrite = JSON.parse(JSON.stringify(meal));
+    var id = toWrite.id; delete toWrite.id;
+    toWrite.updatedAt = Date.now();
+    if (!id){ toWrite.createdAt = Date.now(); }
+    if (db){
+      if (id){ db.doc('meals/'+id).set(toWrite).catch(function(){}); }
+      else { db.collection('meals').add(toWrite).catch(function(){}); }
+    } else {
+      var list = localGetMeals();
+      if (id){
+        var idx = list.findIndex(function(m){ return m.id===id; });
+        if (idx>=0) list[idx] = Object.assign({id:id}, toWrite);
+      } else {
+        toWrite.id = uid();
+        list.push(toWrite);
+      }
+      localSaveMeals(list);
+    }
+  }
+  function deleteMeal(id){
+    if (db){ db.doc('meals/'+id).delete().catch(function(){}); }
+    else { localSaveMeals(localGetMeals().filter(function(m){ return m.id!==id; })); }
+  }
+  function saveWeek(w){
+    if (db){ db.doc('week/current').set(w).catch(function(){}); }
+    else { localSaveWeek(w); }
+  }
+  function updateWeek(partial){
+    var cur = weekDoc || { weekStart: mondayIso(), mealIds: [], checkedItems: {} };
+    var next = Object.assign({}, cur, partial);
+    saveWeek(next);
+  }
+
+  async function initStore(){
+    var namespace = null, sampleNs = null;
+    try { if (window.claude && window.claude.use) namespace = await window.claude.use('db'); } catch(e){ namespace = null; }
+    try { if (window.claude && window.claude.use) sampleNs = await window.claude.use('sample'); } catch(e){ sampleNs = null; }
+    sampleFn = sampleNs;
+
+    if (!namespace){
+      localMode = true;
+      meals = localGetMeals();
+      weekDoc = localGetWeek();
+      dataLoaded = true;
+      render();
+      return;
+    }
+    db = namespace;
+    db.collection('meals').onSnapshot(function(qs){
+      meals = qs.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+      dataLoaded = true;
+      render();
+    }, function(){ localMode = true; meals = localGetMeals(); dataLoaded = true; render(); });
+    db.doc('week/current').onSnapshot(function(snap){
+      weekDoc = snap.exists ? snap.data() : null;
+      dataLoaded = true;
+      render();
+    }, function(){});
+  }
+
+  // ---------- rules engine ----------
+  function computeWarnings(selected){
+    var warnings = [], infos = [];
+    if (selected.length < 5) warnings.push('Only '+selected.length+' of 5 picked so far.');
+    if (selected.length === 5){
+      var tierCounts = { often:0, sometimes:0, rarely:0, unranked:0 };
+      selected.forEach(function(m){ tierCounts[m.tier||'unranked']++; });
+      if ((tierCounts.rarely + tierCounts.unranked) === 0) warnings.push('Nothing from rarely or unranked this week — the list stops moving if it’s always the same meals.');
+      if (tierCounts.often === 0) infos.push('No “often” meals this week — fine occasionally, worth noticing if it keeps happening.');
+    }
+    var lunchOk = selected.filter(function(m){ return m.lunchQuality==='strong' || m.lunchQuality==='ok'; }).length;
+    if (selected.length > 0 && lunchOk < 2) warnings.push('Only '+lunchOk+' of these hold up as lunch leftovers — lunches might be thin this week.');
+    var longCooks = selected.filter(function(m){ return (parseFloat(m.effortMinutes)||0) >= 45; }).length;
+    if (longCooks >= 4) warnings.push('That’s '+longCooks+' long cooks this week — might be a lot on top of everything else.');
+    var baseCounts = {};
+    selected.forEach(function(m){ var b=(m.base||'').toLowerCase().trim(); if (!b) return; baseCounts[b]=(baseCounts[b]||0)+1; });
+    Object.keys(baseCounts).forEach(function(b){ if (baseCounts[b] >= 3) warnings.push('Three or more of these lean on '+b+' — want more variety?'); });
+    selected.forEach(function(m){
+      var d = daysSince(m.lastCooked);
+      if (m.tier === 'sometimes' && d < 24) warnings.push(escapeHtml(m.name)+' was cooked '+d+' day'+(d===1?'':'s')+' ago — sometimes meals are usually spaced about a month apart.');
+      if (m.tier === 'rarely' && d < 75) warnings.push(escapeHtml(m.name)+' was cooked '+d+' day'+(d===1?'':'s')+' ago — rarely meals are usually spaced further apart than that.');
+    });
+    var itemCount = {};
+    selected.forEach(function(m){ (m.ingredients||[]).forEach(function(i){ var k=(i.item||'').toLowerCase().trim(); if (!k) return; itemCount[k]=(itemCount[k]||0)+1; }); });
+    var shared = Object.keys(itemCount).filter(function(k){ return itemCount[k] >= 2; }).length;
+    if (shared > 0) infos.push(shared+' ingredient'+(shared===1?'':'s')+' shared across two or more of these picks — one purchase covers both.');
+    return { warnings: warnings, infos: infos };
+  }
+
+  function buildGroceryList(selected){
+    var combined = {};
+    selected.forEach(function(m){
+      var scale = 4 / (parseFloat(m.servings) || 4);
+      (m.ingredients||[]).forEach(function(ing){
+        if (!ing.item) return;
+        var key = ing.item.trim().toLowerCase()+'|'+(ing.unit||'').trim().toLowerCase();
+        if (!combined[key]){
+          combined[key] = { item: ing.item, unit: ing.unit||'', qtyNum:0, qtyKnown:true, rawParts:[], meals:[], section: SECTIONS.indexOf(ing.section)>=0 ? ing.section : 'other', pantryStaple: true, flag: null, substitute: '' };
+        }
+        var c = combined[key];
+        if (c.meals.indexOf(m.name) === -1) c.meals.push(m.name);
+        if (ing.flag && !c.flag){ c.flag = ing.flag; c.substitute = ing.substitute || ''; }
+        if (!ing.pantryStaple) c.pantryStaple = false;
+        var qn = parseFloat(ing.quantity);
+        if (ing.quantity !== '' && ing.quantity != null && !isNaN(qn)){
+          c.qtyNum += qn * scale;
+        } else {
+          c.qtyKnown = false;
+          if (ing.quantity) c.rawParts.push(ing.quantity);
+        }
+      });
+    });
+    var bySection = {}; SECTIONS.forEach(function(s){ bySection[s] = []; });
+    Object.keys(combined).forEach(function(k){
+      var item = combined[k];
+      item.waste = item.meals.length === 1 && !item.pantryStaple;
+      bySection[item.section].push(item);
+    });
+    SECTIONS.forEach(function(s){ bySection[s].sort(function(a,b){ return a.item.localeCompare(b.item); }); });
+    return bySection;
+  }
+
+  function formatQty(item){
+    if (item.qtyKnown && item.qtyNum){
+      var n = Math.round(item.qtyNum*100)/100;
+      return n + (item.unit ? ' '+item.unit : '');
+    }
+    if (item.rawParts.length) return item.rawParts.join(' + ') + (item.unit ? ' '+item.unit : '');
+    return item.unit || 'amount varies — check the recipe';
+  }
+
+  // ---------- clipboard ----------
+  async function copyText(text, label){
+    var ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; } catch(e){ ok = false; }
+    if (!ok){
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+      } catch(e){ ok = false; }
+    }
+    if (ok){
+      ui.toast = (label||'List')+' copied';
+      ui.copyFallbackText = null;
+      render();
+      setTimeout(function(){ ui.toast = null; render(); }, 2200);
+    } else {
+      ui.copyFallbackText = text;
+      render();
+    }
+  }
+  function groceryCopyText(bySection, onlyBuy){
+    var lines = [];
+    SECTIONS.forEach(function(s){
+      var items = bySection[s].filter(function(i){ return onlyBuy ? !i.pantryStaple : i.pantryStaple; });
+      if (!items.length) return;
+      lines.push('-- '+SECTION_LABELS[s]+' --');
+      items.forEach(function(item){
+        var line = item.item+' — '+formatQty(item)+' ('+item.meals.join(', ')+')';
+        if (item.flag) line += ' [' + FLAG_LABELS[item.flag] + (item.substitute? ': '+item.substitute:'') + ']';
+        lines.push(line);
+      });
+    });
+    return lines.join('\n');
+  }
+
+  // ---------- PDF + AI extraction ----------
+  async function extractPdfText(file){
+    if (typeof pdfjsLib === 'undefined') throw new Error('pdf-lib-unavailable');
+    if (!pdfjsLib.GlobalWorkerOptions.workerSrc){
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    }
+    var buf = await file.arrayBuffer();
+    var pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    var text = '';
+    for (var i=1;i<=pdf.numPages;i++){
+      var page = await pdf.getPage(i);
+      var content = await page.getTextContent();
+      text += content.items.map(function(it){ return it.str || ''; }).join(' ') + '\n';
+    }
+    return text.trim();
+  }
+
+  function buildExtractionPrompt(text, sourceUrl){
+    var schema = '{\n'
+      + ' "name": string,\n'
+      + ' "base": string (main protein or base, e.g. "chicken thighs", "butter beans"),\n'
+      + ' "effort": string (short human description, e.g. "Low, 30 min, one pan"),\n'
+      + ' "effortMinutes": number (best-guess total active+cook minutes),\n'
+      + ' "servings": number (as written, or 4 if unclear),\n'
+      + ' "method": string (numbered steps, one per line, in plain everyday language),\n'
+      + ' "lunchQuality": "strong" | "ok" | "weak" (does it reheat well as next-day lunch?),\n'
+      + ' "dietFlags": [{"rule": string, "substitute": string}] for any of the three household rules this dish breaks as written,\n'
+      + ' "ingredients": [{"item": string, "quantity": string, "unit": string, "section": "produce"|"protein"|"dairy-and-chilled"|"tins-and-dry-goods"|"freezer"|"other", "pantryStaple": boolean, "flag": "not-gluten-free"|"not-vegan"|"contains-egg"|null, "substitute": string}]\n'
+      + '}';
+    return 'You are filling in a structured recipe record for a household meal-planning app.\n\n'
+      + 'Household rules to flag against: strictly gluten-free (flag common gluten culprits like soy sauce, stock, oats, pasta, gnocchi, tortillas, breadcrumbs, spice blends, and suggest a substitute), no eggs ever including hidden ones like mayonnaise or egg wash (flag and suggest a substitute), and a preference for the plant-based version of a dish when it works either way (flag meat/dairy ingredients as not-vegan with a substitute, without removing them).\n\n'
+      + 'Reply with ONLY a JSON object with exactly this shape, no other text:\n' + schema + '\n\n'
+      + 'Recipe text:\n"""\n' + text.slice(0,6000) + '\n"""'
+      + (sourceUrl ? ('\n\nOriginal source (context only, do not fetch it): ' + sourceUrl) : '');
+  }
+
+  function sampleErrorMessage(e){
+    var code = e && e.code;
+    if (code==='not_granted' || code==='sampling_disabled' || code==='not_declared' || code==='capability_disabled' || code==='capability_removed'){
+      sampleUnavailable = true;
+      return 'AI extraction isn’t available in this view — fill in the fields below by hand.';
+    }
+    if (code==='rate_limited') return 'Too many requests right now — try again in a minute.';
+    if (code==='invalid_json') return 'Couldn’t get a clean structured answer — try again, or fill in the fields yourself.';
+    if (code==='cancelled') return null;
+    return 'Something went wrong reading that (' + (e && e.message ? e.message : 'unknown error') + ') — you can still fill in the fields by hand.';
+  }
+
+  // ---------- rendering ----------
+  // Every render() replaces #app's whole innerHTML (no virtual DOM), which would
+  // otherwise yank focus and cursor position out of whatever text field the
+  // household is mid-sentence in (search boxes, the import textarea). Capture and
+  // restore focus by element id across the rebuild so typing stays uninterrupted.
+  function render(){
+    var app = document.getElementById('app');
+    var active = document.activeElement;
+    var focusInfo = null;
+    if (active && app.contains(active) && active.id){
+      focusInfo = { id: active.id, start: active.selectionStart, end: active.selectionEnd };
+    }
+    // If the meal form is already on screen, capture whatever's typed into it before
+    // rebuilding — a re-render can be triggered by the OTHER person's edit arriving
+    // over the shared db, not just a local click, and that must never erase typing
+    // that hasn't been explicitly saved yet.
+    if (ui.formOpen && ui.formDraft && document.getElementById('form-overlay')){
+      syncFormDraftFromDom();
+    }
+
+    var html = header();
+    if (!dataLoaded){
+      html += '<div class="card hero"><p>Loading the list&hellip;</p></div>';
+      app.innerHTML = html;
+      return;
+    }
+    if (currentTab === 'week') html += renderWeekTab();
+    else if (currentTab === 'meals') html += renderMealsTab();
+    else if (currentTab === 'import') html += renderImportTab();
+
+    if (ui.formOpen) html += renderMealFormOverlay();
+    if (ui.weekPickerOpen) html += renderWeekPickerOverlay();
+    html += footnote();
+    if (ui.toast) html += '<div class="toast">'+escapeHtml(ui.toast)+'</div>';
+    app.innerHTML = html;
+
+    if (focusInfo){
+      var el = document.getElementById(focusInfo.id);
+      if (el){
+        el.focus();
+        if (typeof focusInfo.start === 'number' && el.setSelectionRange){
+          try { el.setSelectionRange(focusInfo.start, focusInfo.end); } catch(e){}
+        }
+      }
+    }
+  }
+
+  function header(){
+    return '' +
+      '<div class="topbar"><div class="brand"><h1>Meal Planner</h1><span class="tag mono">household kitchen ops</span></div></div>' +
+      '<div class="tabs">' +
+        tabBtn('week','This Week') + tabBtn('meals','Meals') + tabBtn('import','Import') +
+      '</div>';
+  }
+  function tabBtn(key, label){
+    return '<button class="tab'+(currentTab===key?' active':'')+'" data-action="setTab" data-id="'+key+'">'+label+'</button>';
+  }
+  function footnote(){
+    return '<div class="footnote">' + (localMode ? 'Saved on this device only — open the same link on both phones to keep the shared list in sync.' : 'The meal list and this week’s plan sync live between both of you.') + '</div>';
+  }
+
+  // ---- Week tab ----
+  function getWeekIds(){
+    var ids = (weekDoc && weekDoc.mealIds) ? weekDoc.mealIds.slice() : [];
+    while (ids.length < 5) ids.push(null);
+    return ids.slice(0,5);
+  }
+  function selectedMeals(){
+    return getWeekIds().map(function(id){ return id ? meals.find(function(m){ return m.id===id; }) : null; }).filter(Boolean);
+  }
+  function renderWeekTab(){
+    var picked = selectedMeals();
+    var html = '';
+    if (meals.length === 0){
+      html += '<div class="card hero"><span class="eyebrow">nothing on the list yet</span>' +
+        '<h2>Add a few meals before you plan a week</h2>' +
+        '<p>Head to the Meals tab to add one by hand, or Import to pull one in from a recipe PDF or pasted text.</p>' +
+        '<button class="btn btn-primary" data-action="setTab" data-id="meals">Go to Meals</button></div>';
+      return html;
+    }
+    if (!weekDoc || !weekDoc.started){
+      html += '<div class="card hero"><span class="eyebrow">'+ (weekDoc ? 're-up for next week' : 'new here') +'</span>' +
+        '<h2>Ready to plan this week’s five?</h2>' +
+        '<p>Pick five meals for the week. Two nights are always yours &mdash; takeout, leftovers, eating out, whatever’s easiest.</p>' +
+        '<button class="btn btn-primary" data-action="startWeek">Let’s pick</button></div>';
+      return html;
+    }
+    var rules = computeWarnings(picked);
+    html += '<div class="section-head"><h2>This week’s five</h2>' +
+      (ui.confirmNewWeek
+        ? '<span class="row-actions"><span class="muted">Clear this week’s picks?</span><button class="btn-link" data-action="confirmNewWeek">Yes, start fresh</button><button class="btn-link" data-action="cancelNewWeek">Cancel</button></span>'
+        : '<button class="btn btn-ghost btn-sm" data-action="askNewWeek">Start a new week</button>') +
+      '</div>';
+    html += '<div class="slots">';
+    var weekIds = getWeekIds();
+    for (var i=0;i<5;i++){
+      var mid = weekIds[i];
+      var m = mid ? meals.find(function(x){ return x.id===mid; }) : null;
+      if (m){
+        html += '<div class="slot"><div class="m-info">' +
+          '<div class="m-name">'+escapeHtml(m.name)+'</div>' +
+          '<div class="m-meta">' +
+            '<span class="chip tier-'+m.tier+'">'+TIER_LABELS[m.tier]+'</span>' +
+            (m.lunchQuality ? '<span class="chip lunch-'+m.lunchQuality+'">'+LUNCH_LABELS[m.lunchQuality]+'</span>' : '') +
+            (m.base ? '<span class="muted">'+escapeHtml(m.base)+'</span>' : '') +
+            (m.effort ? '<span class="muted mono">'+escapeHtml(m.effort)+'</span>' : '') +
+          '</div></div>' +
+          '<div class="row-actions"><button class="btn-link" data-action="openWeekPicker" data-id="'+i+'">swap</button>' +
+          '<button class="btn-link" data-action="removeFromWeek" data-id="'+i+'">remove</button></div>' +
+        '</div>';
+      } else {
+        html += '<div class="slot"><button class="slot-empty-btn" data-action="openWeekPicker" data-id="'+i+'">+ pick meal '+(i+1)+'</button></div>';
+      }
+    }
+    html += '</div>';
+    html += '<div class="loose-note">Five dinners planned &mdash; that leaves 2 nights open, on purpose.</div>';
+
+    if (rules.warnings.length){
+      html += '<div class="warnbox warn"><strong>Worth a look:</strong><ul>' + rules.warnings.map(function(w){ return '<li>'+w+'</li>'; }).join('') + '</ul></div>';
+    }
+    if (rules.infos.length){
+      html += '<div class="warnbox info"><ul>' + rules.infos.map(function(w){ return '<li>'+w+'</li>'; }).join('') + '</ul></div>';
+    }
+
+    if (picked.length > 0){
+      html += renderGrocerySection(picked);
+    }
+    return html;
+  }
+
+  function renderGrocerySection(picked){
+    var bySection = buildGroceryList(picked);
+    var checked = (weekDoc && weekDoc.checkedItems) || {};
+    var html = '<div class="section-head"><h2>Grocery list</h2>' +
+      '<div class="row-actions"><button class="btn btn-forest btn-sm" data-action="copyGrocery" data-id="buy">Copy buy list</button>' +
+      '<button class="btn btn-ghost btn-sm" data-action="copyGrocery" data-id="cupboard">Copy cupboard-check</button></div></div>';
+
+    if (ui.copyFallbackText){
+      html += '<div class="card copy-fallback"><div class="muted">Copy didn’t work automatically &mdash; select the text below and copy it manually.</div>' +
+        '<textarea readonly onclick="this.select()">'+escapeHtml(ui.copyFallbackText)+'</textarea></div>';
+    }
+
+    var hasBuy = false, hasCupboard = false;
+    SECTIONS.forEach(function(s){ bySection[s].forEach(function(i){ if (i.pantryStaple) hasCupboard = true; else hasBuy = true; }); });
+
+    html += '<div class="card"><h3 style="margin-bottom:10px;">To buy</h3>';
+    if (!hasBuy) html += '<div class="muted">Nothing to buy &mdash; everything’s a pantry check.</div>';
+    SECTIONS.forEach(function(s){
+      var items = bySection[s].filter(function(i){ return !i.pantryStaple; });
+      if (!items.length) return;
+      html += '<div class="g-section"><h3>'+SECTION_LABELS[s]+'</h3>';
+      items.forEach(function(item){
+        var key = 'buy|'+s+'|'+item.item.toLowerCase();
+        var isChecked = !!checked[key];
+        html += '<div class="g-item'+(isChecked?' checked':'')+'">' +
+          '<input type="checkbox" data-action="toggleGroceryItem" data-id="'+encodeURIComponent(key)+'"'+(isChecked?' checked':'')+'>' +
+          '<div><div class="g-name">'+escapeHtml(item.item)+' &mdash; '+escapeHtml(formatQty(item))+'</div>' +
+          '<div class="g-meta">for '+escapeHtml(item.meals.join(', '))+(item.waste?' &middot; small amount for one meal, easy to waste':'')+'</div>' +
+          (item.flag ? '<div class="g-flag">'+FLAG_LABELS[item.flag]+(item.substitute? ' — '+escapeHtml(item.substitute) : ' — no solid substitute, decide in the shop')+'</div>' : '') +
+          '</div></div>';
+      });
+      html += '</div>';
+    });
+    html += '</div>';
+
+    html += '<div class="card" style="margin-top:14px;"><h3 style="margin-bottom:10px;">Check the cupboard first</h3>';
+    if (!hasCupboard) html += '<div class="muted">Nothing marked as a pantry staple this week.</div>';
+    SECTIONS.forEach(function(s){
+      var items = bySection[s].filter(function(i){ return i.pantryStaple; });
+      if (!items.length) return;
+      html += '<div class="g-section"><h3>'+SECTION_LABELS[s]+'</h3>';
+      items.forEach(function(item){
+        var key = 'cupboard|'+s+'|'+item.item.toLowerCase();
+        var isChecked = !!checked[key];
+        html += '<div class="g-item'+(isChecked?' checked':'')+'">' +
+          '<input type="checkbox" data-action="toggleGroceryItem" data-id="'+encodeURIComponent(key)+'"'+(isChecked?' checked':'')+'>' +
+          '<div><div class="g-name">'+escapeHtml(item.item)+' &mdash; '+escapeHtml(formatQty(item))+'</div>' +
+          '<div class="g-meta">for '+escapeHtml(item.meals.join(', '))+'</div>' +
+          (item.flag ? '<div class="g-flag">'+FLAG_LABELS[item.flag]+(item.substitute? ' — '+escapeHtml(item.substitute) : '')+'</div>' : '') +
+          '</div></div>';
+      });
+      html += '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  // ---- Meals tab ----
+  function renderMealsTab(){
+    var f = ui.mealsFilter;
+    var list = meals.slice();
+    if (f.tier) list = list.filter(function(m){ return m.tier === f.tier; });
+    if (f.lunch) list = list.filter(function(m){ return m.lunchQuality === f.lunch; });
+    if (f.search) list = list.filter(function(m){ return (m.name+' '+m.base).toLowerCase().indexOf(f.search.toLowerCase()) !== -1; });
+    list.sort(function(a,b){
+      if (f.sort === 'effort') return (parseFloat(a.effortMinutes)||0) - (parseFloat(b.effortMinutes)||0);
+      if (f.sort === 'tier') return TIERS.indexOf(a.tier) - TIERS.indexOf(b.tier);
+      if (f.sort === 'lunch') return (a.lunchQuality||'').localeCompare(b.lunchQuality||'');
+      if (f.sort === 'lastCooked') return daysSince(a.lastCooked) - daysSince(b.lastCooked);
+      return (a.name||'').localeCompare(b.name||'');
+    });
+
+    var html = '<div class="section-head"><h2>Meals ('+meals.length+')</h2><button class="btn btn-primary btn-sm" data-action="addMeal">+ Add meal</button></div>';
+    html += '<div class="filters">' +
+      '<input type="search" id="meals-search-input" placeholder="Search name or base" value="'+escapeHtml(f.search)+'" data-action="filterSearch">' +
+      '<select data-action="filterTier"><option value="">All tiers</option>' + TIERS.map(function(t){ return '<option value="'+t+'"'+(f.tier===t?' selected':'')+'>'+TIER_LABELS[t]+'</option>'; }).join('') + '</select>' +
+      '<select data-action="filterLunch"><option value="">Any lunch quality</option>' + Object.keys(LUNCH_LABELS).map(function(l){ return '<option value="'+l+'"'+(f.lunch===l?' selected':'')+'>'+LUNCH_LABELS[l]+'</option>'; }).join('') + '</select>' +
+      '<select data-action="filterSort"><option value="name"'+(f.sort==='name'?' selected':'')+'>Sort: name</option><option value="tier"'+(f.sort==='tier'?' selected':'')+'>Sort: tier</option><option value="effort"'+(f.sort==='effort'?' selected':'')+'>Sort: effort</option><option value="lunch"'+(f.sort==='lunch'?' selected':'')+'>Sort: lunch quality</option><option value="lastCooked"'+(f.sort==='lastCooked'?' selected':'')+'>Sort: last cooked</option></select>' +
+    '</div>';
+
+    if (!list.length){
+      html += '<div class="empty-state">'+(meals.length ? 'No meals match those filters.' : 'No meals yet — add one or import from a PDF.')+'</div>';
+      return html;
+    }
+    html += '<div class="meal-list">';
+    list.forEach(function(m){
+      html += '<div class="meal-row"><div class="m-info">' +
+        '<div class="m-name">'+escapeHtml(m.name)+'</div>' +
+        '<div class="m-meta">' +
+          '<span class="chip tier-'+(m.tier||'unranked')+'">'+TIER_LABELS[m.tier||'unranked']+'</span>' +
+          (m.lunchQuality ? '<span class="chip lunch-'+m.lunchQuality+'">'+LUNCH_LABELS[m.lunchQuality]+'</span>' : '') +
+          (m.base ? '<span class="muted">'+escapeHtml(m.base)+'</span>' : '') +
+          (m.effort ? '<span class="muted mono">'+escapeHtml(m.effort)+'</span>' : '') +
+          (m.dietFlags && m.dietFlags.length ? m.dietFlags.map(function(){ return '<span class="chip flag">household rule</span>'; }).slice(0,1).join('') : '') +
+        '</div></div>' +
+        '<div class="row-actions">';
+      if (ui.confirmDeleteId === m.id){
+        html += '<span class="muted">Delete for good?</span> <button class="btn-link" data-action="confirmDelete" data-id="'+m.id+'">Yes, delete</button> <button class="btn-link" data-action="cancelDelete" data-id="'+m.id+'">Cancel</button>';
+      } else {
+        html += '<button class="btn btn-ghost btn-sm" data-action="editMeal" data-id="'+m.id+'">Edit</button>' +
+          '<button class="btn-link" data-action="askDelete" data-id="'+m.id+'">Delete</button>';
+      }
+      html += '</div></div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  // ---- Import tab ----
+  function renderImportTab(){
+    var html = '<div class="section-head"><h2>Import a meal</h2></div>' +
+      '<div class="card">' +
+      '<p class="muted" style="margin-bottom:12px;">Paste the recipe text, or upload a PDF — either way it lands in the box below, then AI pulls out the name, base, effort, method and ingredients so you’re editing instead of retyping.</p>' +
+      '<div class="field"><label>Upload a PDF (optional)</label><input type="file" accept="application/pdf" data-action="pdfFile"></div>' +
+      (ui.importPdfReading ? '<p class="muted">Reading the PDF&hellip;</p>' : '') +
+      '<div class="field"><label>Recipe text</label><textarea id="import-text-input" data-action="importTextInput" placeholder="Paste the recipe here, or it will fill in after a PDF upload" rows="8">'+escapeHtml(ui.importRawText)+'</textarea></div>' +
+      '<div class="field"><label>Source URL (optional, kept for reference only)</label><input type="url" id="import-url-input" value="'+escapeHtml(ui.importSourceUrl)+'" data-action="importUrlInput" placeholder="https://…"></div>';
+
+    if (sampleUnavailable){
+      html += '<p class="muted">AI extraction isn’t available in this view — write the details in by hand below.</p>' +
+        '<button class="btn btn-primary" data-action="manualFromImport">Fill in the fields by hand</button>';
+    } else {
+      html += '<button class="btn btn-primary" data-action="extractImport"'+(ui.importExtracting || !ui.importRawText.trim() ? ' disabled' : '')+'>'+(ui.importExtracting ? 'Reading recipe…' : 'Extract details with AI')+'</button> ' +
+        '<button class="btn btn-ghost" data-action="manualFromImport">Skip, fill in by hand</button>';
+    }
+    if (ui.importError) html += '<p class="g-flag" style="margin-top:10px;">'+escapeHtml(ui.importError)+'</p>';
+    html += '</div>';
+    return html;
+  }
+
+  // ---- Meal form (add / edit / review-import) ----
+  function renderMealFormOverlay(){
+    var d = ui.formDraft;
+    var isEdit = !!d.id;
+    var html = '<div class="overlay" id="form-overlay"><div class="sheet">' +
+      '<div class="sheet-head"><h3>'+(isEdit ? 'Edit meal' : 'New meal')+'</h3><button class="close-x" data-action="closeForm">&times;</button></div>' +
+      '<form data-action="saveMealForm">' +
+      '<div class="field"><label>Name</label><input type="text" id="f-name" value="'+escapeHtml(d.name)+'" required></div>' +
+      '<div class="grid-2">' +
+        '<div class="field"><label>Base / main protein</label><input type="text" id="f-base" value="'+escapeHtml(d.base)+'"></div>' +
+        '<div class="field"><label>Tier</label><select id="f-tier">' + TIERS.map(function(t){ return '<option value="'+t+'"'+(d.tier===t?' selected':'')+'>'+TIER_LABELS[t]+'</option>'; }).join('') + '</select></div>' +
+      '</div>' +
+      '<div class="grid-2">' +
+        '<div class="field"><label>Effort (human, e.g. "Low, 30 min, one pan")</label><input type="text" id="f-effort" value="'+escapeHtml(d.effort)+'"></div>' +
+        '<div class="field"><label>Effort minutes (for sorting)</label><input type="number" id="f-effortMinutes" value="'+escapeHtml(d.effortMinutes)+'" min="0"></div>' +
+      '</div>' +
+      '<div class="grid-2">' +
+        '<div class="field"><label>Servings</label><input type="number" id="f-servings" value="'+escapeHtml(d.servings)+'" min="1"></div>' +
+        '<div class="field"><label>Lunch quality</label><select id="f-lunchQuality">' + Object.keys(LUNCH_LABELS).map(function(l){ return '<option value="'+l+'"'+(d.lunchQuality===l?' selected':'')+'>'+LUNCH_LABELS[l]+'</option>'; }).join('') + '</select></div>' +
+      '</div>' +
+      '<div class="grid-2">' +
+        '<div class="field"><label>Last cooked</label><input type="date" id="f-lastCooked" value="'+escapeHtml(d.lastCooked)+'"></div>' +
+        '<div class="field"><label>Times cooked</label><input type="number" id="f-timesCooked" value="'+escapeHtml(d.timesCooked)+'" min="0"></div>' +
+      '</div>' +
+      '<div class="field"><label>Source URL (optional)</label><input type="url" id="f-sourceUrl" value="'+escapeHtml(d.sourceUrl)+'"></div>' +
+      '<div class="field"><label>Method</label><textarea id="f-method" rows="6">'+escapeHtml(d.method)+'</textarea></div>' +
+      '<div class="field"><label>Notes (substitutions, storage, what changed last time)</label><textarea id="f-notes" rows="3">'+escapeHtml(d.notes)+'</textarea></div>' +
+
+      '<fieldset><legend>Household rule flags</legend>' + renderDietRows(d.dietFlags) +
+        '<button type="button" class="btn-link" data-action="addDietRow">+ add a rule flag</button></fieldset>' +
+
+      '<fieldset><legend>Ingredients</legend>' + renderIngredientRows(d.ingredients) +
+        '<button type="button" class="btn-link" data-action="addIngredientRow">+ add ingredient</button></fieldset>' +
+
+      '<div class="form-actions">' +
+        '<div>'+(isEdit ? '<button type="button" class="btn btn-ghost" data-action="markCooked">Mark cooked today</button>' : '')+'</div>' +
+        '<div class="row-actions"><button type="button" class="btn btn-ghost" data-action="closeForm">Cancel</button><button type="submit" class="btn btn-primary">Save meal</button></div>' +
+      '</div>' +
+      '</form></div></div>';
+    return html;
+  }
+  function renderDietRows(rows){
+    if (!rows.length) return '<p class="muted" style="margin-bottom:8px;">No flags — this dish is fine as written.</p>';
+    return rows.map(function(r, i){
+      return '<div class="diet-row" data-row-index="'+i+'">' +
+        '<input type="text" data-field="rule" placeholder="Rule broken, e.g. not gluten-free" value="'+escapeHtml(r.rule)+'">' +
+        '<input type="text" data-field="substitute" placeholder="Workable substitute" value="'+escapeHtml(r.substitute)+'">' +
+        '<button type="button" class="btn-link" data-action="removeDietRow" data-id="'+i+'">remove</button>' +
+      '</div>';
+    }).join('');
+  }
+  function renderIngredientRows(rows){
+    if (!rows.length) return '<p class="muted" style="margin-bottom:8px;">No ingredients yet.</p>';
+    return rows.map(function(r, i){
+      return '<div class="sub-row" data-row-index="'+i+'">' +
+        '<input type="text" data-field="item" placeholder="Item" value="'+escapeHtml(r.item)+'" data-action-blur="autoFlagRow">' +
+        '<input type="text" data-field="quantity" placeholder="Qty" value="'+escapeHtml(r.quantity)+'">' +
+        '<input type="text" data-field="unit" placeholder="Unit" value="'+escapeHtml(r.unit)+'">' +
+        '<select data-field="section">' + SECTIONS.map(function(s){ return '<option value="'+s+'"'+(r.section===s?' selected':'')+'>'+SECTION_LABELS[s]+'</option>'; }).join('') + '</select>' +
+        '<label style="display:flex;align-items:center;gap:4px;font-size:0.72rem;" title="Check the cupboard first, don’t add to buy list"><input type="checkbox" data-field="pantryStaple"'+(r.pantryStaple?' checked':'')+'> staple</label>' +
+        '<select data-field="flag"><option value="">No flag</option>' + Object.keys(FLAG_LABELS).map(function(fl){ return '<option value="'+fl+'"'+(r.flag===fl?' selected':'')+'>'+FLAG_LABELS[fl]+'</option>'; }).join('') + '</select>' +
+        '<button type="button" class="btn-link" data-action="removeIngredientRow" data-id="'+i+'">remove</button>' +
+        (r.flag ? '<input type="text" data-field="substitute" placeholder="Substitute" value="'+escapeHtml(r.substitute)+'" style="grid-column:1 / -1;">' : '') +
+      '</div>';
+    }).join('');
+  }
+
+  // ---- Week picker overlay ----
+  function renderWeekPickerOverlay(){
+    var used = (weekDoc && weekDoc.mealIds) || [];
+    var list = meals.filter(function(m){
+      if (ui.weekPickerFilterTier && m.tier !== ui.weekPickerFilterTier) return false;
+      if (ui.weekPickerSearch && (m.name+' '+m.base).toLowerCase().indexOf(ui.weekPickerSearch.toLowerCase())===-1) return false;
+      return true;
+    });
+    var html = '<div class="overlay" id="week-picker-overlay"><div class="sheet">' +
+      '<div class="sheet-head"><h3>Pick a meal</h3><button class="close-x" data-action="closeWeekPicker">&times;</button></div>' +
+      '<div class="filters"><input type="search" id="week-picker-search-input" placeholder="Search" value="'+escapeHtml(ui.weekPickerSearch)+'" data-action="weekPickerSearch">' +
+      '<select data-action="weekPickerTier"><option value="">All tiers</option>' + TIERS.map(function(t){ return '<option value="'+t+'"'+(ui.weekPickerFilterTier===t?' selected':'')+'>'+TIER_LABELS[t]+'</option>'; }).join('') + '</select></div>';
+    if (!list.length) html += '<p class="muted">No meals match.</p>';
+    list.forEach(function(m){
+      var alreadyIn = used.indexOf(m.id) !== -1;
+      html += '<button class="pick-option" data-action="chooseWeekMeal" data-id="'+m.id+'"><span><strong>'+escapeHtml(m.name)+'</strong> <span class="muted">'+escapeHtml(m.base||'')+'</span></span>' +
+        '<span class="chip tier-'+(m.tier||'unranked')+'">'+TIER_LABELS[m.tier||'unranked']+(alreadyIn?' &middot; in this week':'')+'</span></button>';
+    });
+    html += '</div></div>';
+    return html;
+  }
+
+  // ---------- actions ----------
+  function syncFormDraftFromDom(){
+    var d = ui.formDraft; if (!d) return;
+    var g = function(id){ var el = document.getElementById(id); return el ? el.value : ''; };
+    d.name = g('f-name'); d.base = g('f-base'); d.tier = g('f-tier'); d.effort = g('f-effort');
+    d.effortMinutes = g('f-effortMinutes'); d.servings = g('f-servings') || 4; d.lunchQuality = g('f-lunchQuality');
+    d.lastCooked = g('f-lastCooked'); d.timesCooked = g('f-timesCooked') || 0; d.sourceUrl = g('f-sourceUrl');
+    d.method = g('f-method'); d.notes = g('f-notes');
+    document.querySelectorAll('.diet-row').forEach(function(row){
+      var i = parseInt(row.getAttribute('data-row-index'),10);
+      var rule = row.querySelector('[data-field="rule"]'), sub = row.querySelector('[data-field="substitute"]');
+      d.dietFlags[i] = { rule: rule?rule.value:'', substitute: sub?sub.value:'' };
+    });
+    document.querySelectorAll('.sub-row').forEach(function(row){
+      var i = parseInt(row.getAttribute('data-row-index'),10);
+      var get = function(f){ return row.querySelector('[data-field="'+f+'"]'); };
+      var itemEl=get('item'), qtyEl=get('quantity'), unitEl=get('unit'), secEl=get('section'), pantryEl=get('pantryStaple'), flagEl=get('flag'), subEl=get('substitute');
+      d.ingredients[i] = {
+        item: itemEl?itemEl.value:'', quantity: qtyEl?qtyEl.value:'', unit: unitEl?unitEl.value:'',
+        section: secEl?secEl.value:'other', pantryStaple: pantryEl?pantryEl.checked:false,
+        flag: flagEl && flagEl.value ? flagEl.value : null, substitute: subEl?subEl.value:''
+      };
+    });
+  }
+
+  var actions = {
+    setTab: function(el, id){ currentTab = id; ui.weekPickerOpen=false; render(); },
+
+    addMeal: function(){ ui.formDraft = blankMeal(); ui.formOpen = true; render(); },
+    editMeal: function(el, id){ var m = meals.find(function(x){ return x.id===id; }); if (!m) return; ui.formDraft = JSON.parse(JSON.stringify(m)); ui.formOpen = true; render(); },
+    closeForm: function(){ ui.formOpen = false; ui.formDraft = null; render(); },
+    askDelete: function(el, id){ ui.confirmDeleteId = id; render(); },
+    cancelDelete: function(){ ui.confirmDeleteId = null; render(); },
+    confirmDelete: function(el, id){ deleteMeal(id); ui.confirmDeleteId = null; render(); },
+    markCooked: function(){
+      syncFormDraftFromDom();
+      ui.formDraft.lastCooked = todayIso();
+      ui.formDraft.timesCooked = (parseInt(ui.formDraft.timesCooked,10)||0) + 1;
+      render();
+    },
+
+    addDietRow: function(){ syncFormDraftFromDom(); ui.formDraft.dietFlags.push(newDietFlag()); render(); },
+    removeDietRow: function(el, id){ syncFormDraftFromDom(); ui.formDraft.dietFlags.splice(parseInt(id,10),1); render(); },
+    addIngredientRow: function(){ syncFormDraftFromDom(); ui.formDraft.ingredients.push(newIngredient()); render(); },
+    removeIngredientRow: function(el, id){ syncFormDraftFromDom(); ui.formDraft.ingredients.splice(parseInt(id,10),1); render(); },
+
+    filterSearch: function(el){ ui.mealsFilter.search = el.value; render(); },
+    filterTier: function(el){ ui.mealsFilter.tier = el.value; render(); },
+    filterLunch: function(el){ ui.mealsFilter.lunch = el.value; render(); },
+    filterSort: function(el){ ui.mealsFilter.sort = el.value; render(); },
+
+    startWeek: function(){ updateWeek({ weekStart: mondayIso(), mealIds: [null,null,null,null,null], checkedItems: {}, started: true }); },
+    askNewWeek: function(){ ui.confirmNewWeek = true; render(); },
+    cancelNewWeek: function(){ ui.confirmNewWeek = false; render(); },
+    confirmNewWeek: function(){
+      ui.confirmNewWeek = false;
+      updateWeek({ weekStart: mondayIso(), mealIds: [null,null,null,null,null], checkedItems: {}, started: true });
+    },
+    openWeekPicker: function(el, id){ ui.weekPickerOpen = true; ui.weekPickerSlot = parseInt(id,10); ui.weekPickerSearch=''; ui.weekPickerFilterTier=''; render(); },
+    closeWeekPicker: function(){ ui.weekPickerOpen = false; render(); },
+    weekPickerSearch: function(el){ ui.weekPickerSearch = el.value; render(); },
+    weekPickerTier: function(el){ ui.weekPickerFilterTier = el.value; render(); },
+    chooseWeekMeal: function(el, id){
+      var ids = getWeekIds();
+      ids[ui.weekPickerSlot] = id;
+      ui.weekPickerOpen = false;
+      updateWeek({ mealIds: ids, weekStart: (weekDoc && weekDoc.weekStart) || mondayIso(), started: true });
+    },
+    removeFromWeek: function(el, id){
+      var ids = getWeekIds();
+      ids[parseInt(id,10)] = null;
+      updateWeek({ mealIds: ids });
+    },
+
+    toggleGroceryItem: function(el, id){
+      var key = decodeURIComponent(id);
+      var checked = Object.assign({}, (weekDoc && weekDoc.checkedItems) || {});
+      checked[key] = !checked[key];
+      updateWeek({ checkedItems: checked });
+    },
+    copyGrocery: function(el, id){
+      var picked = selectedMeals();
+      var bySection = buildGroceryList(picked);
+      var text = groceryCopyText(bySection, id === 'buy');
+      copyText(text || 'Nothing here yet.', id === 'buy' ? 'Buy list' : 'Cupboard-check list');
+    },
+
+    importTextInput: function(el){ ui.importRawText = el.value; },
+    importUrlInput: function(el){ ui.importSourceUrl = el.value; },
+    pdfFile: async function(el){
+      var file = el.files && el.files[0];
+      if (!file) return;
+      ui.importPdfReading = true; ui.importError = null; render();
+      try {
+        var text = await extractPdfText(file);
+        ui.importRawText = text;
+      } catch(e){
+        ui.importError = 'Couldn’t read that PDF automatically — try opening it and pasting the recipe text instead.';
+      }
+      ui.importPdfReading = false; render();
+    },
+    extractImport: async function(){
+      if (!sampleFn){ sampleUnavailable = true; render(); return; }
+      ui.importExtracting = true; ui.importError = null; render();
+      try {
+        var draft = await sampleFn.json(buildExtractionPrompt(ui.importRawText, ui.importSourceUrl));
+        var m = blankMeal();
+        m.name = draft.name || ''; m.base = draft.base || ''; m.effort = draft.effort || '';
+        m.effortMinutes = draft.effortMinutes || ''; m.servings = draft.servings || 4;
+        m.method = draft.method || ''; m.lunchQuality = ['strong','ok','weak'].indexOf(draft.lunchQuality)!==-1 ? draft.lunchQuality : 'ok';
+        m.sourceUrl = ui.importSourceUrl || '';
+        m.dietFlags = Array.isArray(draft.dietFlags) ? draft.dietFlags.map(function(f){ return { rule: f.rule||'', substitute: f.substitute||'' }; }) : [];
+        m.ingredients = Array.isArray(draft.ingredients) ? draft.ingredients.map(function(i){
+          var flag = i.flag, sub = i.substitute || '';
+          if (!flag){ var auto = autoFlagIngredient(i.item); if (auto){ flag = auto.flag; sub = sub || auto.substitute; } }
+          return { item: i.item||'', quantity: String(i.quantity!=null?i.quantity:''), unit: i.unit||'', section: SECTIONS.indexOf(i.section)!==-1 ? i.section : 'other', pantryStaple: !!i.pantryStaple, flag: flag||null, substitute: sub };
+        }) : [];
+        ui.importExtracting = false;
+        ui.formDraft = m; ui.formOpen = true;
+        render();
+      } catch(e){
+        ui.importExtracting = false;
+        var msg = sampleErrorMessage(e);
+        ui.importError = msg;
+        render();
+      }
+    },
+    manualFromImport: function(){
+      var m = blankMeal();
+      m.method = ui.importRawText; m.sourceUrl = ui.importSourceUrl;
+      ui.formDraft = m; ui.formOpen = true; render();
+    },
+
+    saveMealForm: function(el, id, extra, e){
+      e.preventDefault();
+      syncFormDraftFromDom();
+      var d = ui.formDraft;
+      if (!d.name || !d.name.trim()) return;
+      d.ingredients.forEach(function(ing){
+        if (!ing.flag){ var auto = autoFlagIngredient(ing.item); if (auto){ ing.flag = auto.flag; ing.substitute = ing.substitute || auto.substitute; } }
+      });
+      saveMeal(d);
+      ui.formOpen = false; ui.formDraft = null;
+      ui.importRawText = ''; ui.importSourceUrl = ''; ui.importError = null;
+      render();
+    }
+  };
+  var blurActions = {
+    autoFlagRow: function(el){
+      var row = el.closest('.sub-row'); if (!row) return;
+      var flagEl = row.querySelector('[data-field="flag"]');
+      if (flagEl && flagEl.value) return;
+      var auto = autoFlagIngredient(el.value);
+      if (auto && ui.formDraft){
+        var i = parseInt(row.getAttribute('data-row-index'),10);
+        syncFormDraftFromDom();
+        ui.formDraft.ingredients[i].flag = auto.flag;
+        ui.formDraft.ingredients[i].substitute = ui.formDraft.ingredients[i].substitute || auto.substitute;
+        render();
+      }
+    }
+  };
+
+  // Actions driven by change/input events must NOT also fire on click (the delegated
+  // click listener below would otherwise re-run them a second time on the same
+  // interaction — double-toggling a checkbox back to its old value, or tearing a
+  // text input out of the DOM mid-focus when its container re-renders).
+  var CHANGE_ACTIONS = { pdfFile:1, filterTier:1, filterLunch:1, filterSort:1, weekPickerTier:1, toggleGroceryItem:1 };
+  var LIVE_INPUT_ACTIONS = { importTextInput:1, importUrlInput:1, filterSearch:1, weekPickerSearch:1 };
+
+  document.getElementById('app').addEventListener('click', function(e){
+    var el = e.target.closest('[data-action]');
+    if (!el) return;
+    var action = el.getAttribute('data-action');
+    if (!actions[action] || CHANGE_ACTIONS[action] || LIVE_INPUT_ACTIONS[action]) return;
+    actions[action](el, el.getAttribute('data-id'), null, e);
+  });
+  document.getElementById('app').addEventListener('change', function(e){
+    var el = e.target.closest('[data-action]');
+    if (!el) return;
+    var action = el.getAttribute('data-action');
+    if (CHANGE_ACTIONS[action] && actions[action]) actions[action](el, el.getAttribute('data-id'), null, e);
+  });
+  document.getElementById('app').addEventListener('input', function(e){
+    var el = e.target.closest('[data-action]');
+    if (!el) return;
+    var action = el.getAttribute('data-action');
+    if (LIVE_INPUT_ACTIONS[action] && actions[action]) actions[action](el);
+  });
+  document.getElementById('app').addEventListener('blur', function(e){
+    var el = e.target.closest('[data-action-blur]');
+    if (!el) return;
+    var action = el.getAttribute('data-action-blur');
+    if (blurActions[action]) blurActions[action](el);
+  }, true);
+  document.getElementById('app').addEventListener('submit', function(e){
+    var el = e.target.closest('[data-action]');
+    if (!el) return;
+    var action = el.getAttribute('data-action');
+    if (actions[action]) actions[action](el, null, null, e);
+  });
+  document.getElementById('app').addEventListener('mousedown', function(e){
+    if (e.target.id === 'form-overlay') actions.closeForm();
+    if (e.target.id === 'week-picker-overlay') actions.closeWeekPicker();
+  });
+
+  render();
+  initStore();
+})();
+</script>
