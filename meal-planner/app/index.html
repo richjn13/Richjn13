@@ -83,6 +83,9 @@
   .chip.tier-rarely{background:#F3E1D2; color:#8A4A1E;}
   .chip.tier-unranked{background:#EDEDED; color:#5A5A5A;}
   .chip.flag{ background:#FBE0E6; color:#A62A4C; }
+  .chip.in-week{ background:#DCEEE9; color:#1F6E5C; }
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .chip.in-week{ background:#163530; color:#8FD6C4; } }
+  :root[data-theme="dark"] .chip.in-week{ background:#163530; color:#8FD6C4; }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]) .chip.tier-often{background:#233B1C; color:#B4DE9C;}
     :root:not([data-theme="light"]) .chip.tier-sometimes{background:#163530; color:#8FD6C4;}
@@ -132,6 +135,9 @@
   .diet-row{ display:grid; grid-template-columns:1fr 1fr auto; gap:6px; margin-bottom:8px; }
   .diet-row input{ border:1px solid var(--line); background:var(--paper); color:var(--ink); border-radius:6px; padding:7px 8px; font-size:0.8rem; }
   .form-actions{ display:flex; justify-content:space-between; gap:10px; margin-top:16px; flex-wrap:wrap; }
+  .adjust-fieldset{ background:var(--card-2); }
+  .adjust-row{ display:flex; gap:8px; flex-wrap:wrap; }
+  .adjust-row input{ flex:1; min-width:200px; border:1px solid var(--line); background:var(--paper); color:var(--ink); border-radius:8px; padding:9px 10px; font-size:0.88rem; }
 
   /* import */
   .import-modes{ display:flex; gap:8px; margin-bottom:14px; }
@@ -270,6 +276,7 @@
     mealsFilter: { tier:'', search:'', sort:'name' },
     importRawText: '', importSourceUrl: '', importDraft: null, importExtracting:false, importError:null, importPdfReading:false,
     bulkRunning:false, bulkTotal:0, bulkDone:0, bulkFailed:[],
+    adjustInstruction:'', adjusting:false, adjustError:null, adjustApplied:false,
     expandedMealId: null,
     confirmDeleteId: null,
     toast: null,
@@ -486,19 +493,50 @@
       + (sourceUrl ? ('\n\nOriginal source (context only, do not fetch it): ' + sourceUrl) : '');
   }
 
+  function mapDietFlags(list){
+    return Array.isArray(list) ? list.map(function(f){ return { rule: f.rule||'', substitute: f.substitute||'' }; }) : [];
+  }
+  function mapIngredients(list){
+    return Array.isArray(list) ? list.map(function(i){
+      var flag = i.flag, sub = i.substitute || '';
+      if (!flag){ var auto = autoFlagIngredient(i.item); if (auto){ flag = auto.flag; sub = sub || auto.substitute; } }
+      return { item: i.item||'', quantity: String(i.quantity!=null?i.quantity:''), unit: i.unit||'', section: SECTIONS.indexOf(i.section)!==-1 ? i.section : 'other', pantryStaple: !!i.pantryStaple, flag: flag||null, substitute: sub };
+    }) : [];
+  }
+  function resetAdjustState(){
+    ui.adjustInstruction = ''; ui.adjusting = false; ui.adjustError = null; ui.adjustApplied = false;
+  }
   function draftToMeal(draft, sourceUrl){
     var m = blankMeal();
     m.name = draft.name || ''; m.base = draft.base || ''; m.effort = draft.effort || '';
     m.effortMinutes = draft.effortMinutes || ''; m.servings = draft.servings || 4;
     m.method = draft.method || '';
     m.sourceUrl = sourceUrl || '';
-    m.dietFlags = Array.isArray(draft.dietFlags) ? draft.dietFlags.map(function(f){ return { rule: f.rule||'', substitute: f.substitute||'' }; }) : [];
-    m.ingredients = Array.isArray(draft.ingredients) ? draft.ingredients.map(function(i){
-      var flag = i.flag, sub = i.substitute || '';
-      if (!flag){ var auto = autoFlagIngredient(i.item); if (auto){ flag = auto.flag; sub = sub || auto.substitute; } }
-      return { item: i.item||'', quantity: String(i.quantity!=null?i.quantity:''), unit: i.unit||'', section: SECTIONS.indexOf(i.section)!==-1 ? i.section : 'other', pantryStaple: !!i.pantryStaple, flag: flag||null, substitute: sub };
-    }) : [];
+    m.dietFlags = mapDietFlags(draft.dietFlags);
+    m.ingredients = mapIngredients(draft.ingredients);
     return m;
+  }
+
+  function buildAdjustPrompt(draft, instruction){
+    var current = {
+      name: draft.name, base: draft.base, servings: draft.servings,
+      method: draft.method, notes: draft.notes,
+      dietFlags: draft.dietFlags, ingredients: draft.ingredients
+    };
+    var schema = '{ "base": string, "method": string, "notes": string, '
+      + '"dietFlags": [{"rule": string, "substitute": string}], '
+      + '"ingredients": [{"item": string, "quantity": string, "unit": string, '
+      + '"section": "produce"|"protein"|"dairy-and-chilled"|"tins-and-dry-goods"|"freezer"|"other", '
+      + '"pantryStaple": boolean, "flag": "not-gluten-free"|"not-vegan"|"contains-egg"|null, "substitute": string} ] }';
+    return 'You are adjusting an existing recipe record for a household meal-planning app, based on a requested change.\n\n'
+      + 'Household rules to respect unless the requested change itself deliberately overrides one: strictly gluten-free '
+      + '(flag common gluten culprits with a substitute), no eggs ever (flag and suggest a substitute), and prefer the '
+      + 'plant-based option when a dish works either way (flag meat/dairy as not-vegan with a substitute, without '
+      + 'necessarily removing it).\n\n'
+      + 'Current recipe (JSON):\n' + JSON.stringify(current, null, 2) + '\n\n'
+      + 'Requested change: ' + instruction + '\n\n'
+      + 'Reply with ONLY a JSON object with exactly this shape, reflecting the FULL recipe after applying the change '
+      + '(carry over any field the change does not affect unchanged, do not omit or shorten it):\n' + schema;
   }
 
   function sampleErrorMessage(e){
@@ -724,20 +762,29 @@
       return html;
     }
     html += '<div class="meal-list">';
+    var currentWeekIds = getWeekIds();
+    var weekFull = currentWeekIds.indexOf(null) === -1;
     list.forEach(function(m){
       var expanded = ui.expandedMealId === m.id;
+      var inWeek = currentWeekIds.indexOf(m.id) !== -1;
       html += '<div class="meal-row-wrap"><div class="meal-row"><div class="m-info">' +
         '<button type="button" class="m-name-btn" data-action="toggleMealView" data-id="'+m.id+'">'+escapeHtml(m.name)+'</button>' +
         '<div class="m-meta">' +
           '<span class="chip tier-'+(m.tier||'unranked')+'">'+TIER_LABELS[m.tier||'unranked']+'</span>' +
           (m.base ? '<span class="muted">'+escapeHtml(m.base)+'</span>' : '') +
           (m.effort ? '<span class="muted mono">'+escapeHtml(m.effort)+'</span>' : '') +
+          (inWeek ? '<span class="chip in-week">In this week</span>' : '') +
           (m.dietFlags && m.dietFlags.length ? m.dietFlags.map(function(){ return '<span class="chip flag">household rule</span>'; }).slice(0,1).join('') : '') +
         '</div></div>' +
         '<div class="row-actions">';
       if (ui.confirmDeleteId === m.id){
         html += '<span class="muted">Delete for good?</span> <button class="btn-link" data-action="confirmDelete" data-id="'+m.id+'">Yes, delete</button> <button class="btn-link" data-action="cancelDelete" data-id="'+m.id+'">Cancel</button>';
       } else {
+        if (inWeek){
+          html += '<button class="btn btn-ghost btn-sm" data-action="removeMealFromWeekById" data-id="'+m.id+'">Remove from week</button>';
+        } else {
+          html += '<button class="btn btn-ghost btn-sm" data-action="addMealToWeek" data-id="'+m.id+'"'+(weekFull?' disabled title="This week already has 5 picks"':'')+'>'+(weekFull?'Week full':'+ Add to week')+'</button>';
+        }
         html += '<button class="btn btn-ghost btn-sm" data-action="toggleMealView" data-id="'+m.id+'">'+(expanded?'Hide':'View')+'</button>' +
           '<button class="btn btn-ghost btn-sm" data-action="editMeal" data-id="'+m.id+'">Edit</button>' +
           '<button class="btn-link" data-action="askDelete" data-id="'+m.id+'">Delete</button>';
@@ -810,6 +857,20 @@
   }
 
   // ---- Meal form (add / edit / review-import) ----
+  function renderAdjustBlock(){
+    if (sampleUnavailable) return '';
+    var html = '<fieldset class="adjust-fieldset"><legend>Adjust with AI</legend>' +
+      '<p class="muted" style="margin-bottom:8px;">Describe a change and it’s applied to the base, method, ingredients and notes below — review and edit before saving.</p>' +
+      '<div class="adjust-row">' +
+        '<input type="text" id="adjust-instruction" placeholder="e.g. swap the chicken for tofu, we used way less garlic, double the batch" value="'+escapeHtml(ui.adjustInstruction)+'">' +
+        '<button type="button" class="btn btn-forest btn-sm" data-action="adjustWithAi"'+(ui.adjusting?' disabled':'')+'>'+(ui.adjusting?'Applying…':'Apply')+'</button>' +
+      '</div>';
+    if (ui.adjustError) html += '<p class="g-flag" style="margin-top:8px;">'+escapeHtml(ui.adjustError)+'</p>';
+    if (ui.adjustApplied) html += '<p class="muted" style="margin-top:8px;">Applied — check the fields below, then save.</p>';
+    html += '</fieldset>';
+    return html;
+  }
+
   function renderMealFormOverlay(){
     var d = ui.formDraft;
     var isEdit = !!d.id;
@@ -833,6 +894,7 @@
         '<div class="field"><label>Times cooked</label><input type="number" id="f-timesCooked" value="'+escapeHtml(d.timesCooked)+'" min="0"></div>' +
         '<div class="field"><label>Source URL (optional)</label><input type="url" id="f-sourceUrl" value="'+escapeHtml(d.sourceUrl)+'"></div>' +
       '</div>' +
+      renderAdjustBlock() +
       '<div class="field"><label>Method</label><textarea id="f-method" rows="6">'+escapeHtml(d.method)+'</textarea></div>' +
       '<div class="field"><label>Notes (substitutions, storage, what changed last time)</label><textarea id="f-notes" rows="3">'+escapeHtml(d.notes)+'</textarea></div>' +
 
@@ -905,6 +967,8 @@
     d.effortMinutes = g('f-effortMinutes'); d.servings = g('f-servings') || 4;
     d.lastCooked = g('f-lastCooked'); d.timesCooked = g('f-timesCooked') || 0; d.sourceUrl = g('f-sourceUrl');
     d.method = g('f-method'); d.notes = g('f-notes');
+    var adjEl = document.getElementById('adjust-instruction');
+    if (adjEl) ui.adjustInstruction = adjEl.value;
     document.querySelectorAll('.diet-row').forEach(function(row){
       var i = parseInt(row.getAttribute('data-row-index'),10);
       var rule = row.querySelector('[data-field="rule"]'), sub = row.querySelector('[data-field="substitute"]');
@@ -925,10 +989,10 @@
   var actions = {
     setTab: function(el, id){ currentTab = id; ui.weekPickerOpen=false; render(); },
 
-    addMeal: function(){ ui.formDraft = blankMeal(); ui.formOpen = true; render(); },
-    editMeal: function(el, id){ var m = meals.find(function(x){ return x.id===id; }); if (!m) return; ui.formDraft = JSON.parse(JSON.stringify(m)); ui.formOpen = true; render(); },
+    addMeal: function(){ resetAdjustState(); ui.formDraft = blankMeal(); ui.formOpen = true; render(); },
+    editMeal: function(el, id){ var m = meals.find(function(x){ return x.id===id; }); if (!m) return; resetAdjustState(); ui.formDraft = JSON.parse(JSON.stringify(m)); ui.formOpen = true; render(); },
     toggleMealView: function(el, id){ ui.expandedMealId = (ui.expandedMealId === id ? null : id); render(); },
-    closeForm: function(){ ui.formOpen = false; ui.formDraft = null; render(); },
+    closeForm: function(){ resetAdjustState(); ui.formOpen = false; ui.formDraft = null; render(); },
     askDelete: function(el, id){ ui.confirmDeleteId = id; render(); },
     cancelDelete: function(){ ui.confirmDeleteId = null; render(); },
     confirmDelete: function(el, id){ deleteMeal(id); ui.confirmDeleteId = null; render(); },
@@ -969,6 +1033,21 @@
       var ids = getWeekIds();
       ids[parseInt(id,10)] = null;
       updateWeek({ mealIds: ids });
+    },
+    addMealToWeek: function(el, id){
+      var ids = getWeekIds();
+      var slot = ids.indexOf(null);
+      if (slot === -1) return;
+      ids[slot] = id;
+      updateWeek({ mealIds: ids, weekStart: (weekDoc && weekDoc.weekStart) || mondayIso(), started: true });
+      ui.toast = 'Added to this week';
+      render();
+      setTimeout(function(){ ui.toast = null; render(); }, 1800);
+    },
+    removeMealFromWeekById: function(el, id){
+      var ids = getWeekIds();
+      var idx = ids.indexOf(id);
+      if (idx !== -1){ ids[idx] = null; updateWeek({ mealIds: ids }); }
     },
 
     toggleGroceryItem: function(el, id){
@@ -1029,6 +1108,7 @@
       try {
         var draft = await sampleFn.json(buildExtractionPrompt(ui.importRawText, ui.importSourceUrl));
         ui.importExtracting = false;
+        resetAdjustState();
         ui.formDraft = draftToMeal(draft, ui.importSourceUrl);
         ui.formOpen = true;
         render();
@@ -1038,7 +1118,34 @@
         render();
       }
     },
+
+    adjustWithAi: async function(){
+      if (!sampleFn || !ui.formDraft) return;
+      var input = document.getElementById('adjust-instruction');
+      var instruction = input ? input.value.trim() : '';
+      if (!instruction) return;
+      syncFormDraftFromDom();
+      ui.adjustInstruction = instruction;
+      ui.adjusting = true; ui.adjustError = null; ui.adjustApplied = false; render();
+      try {
+        var result = await sampleFn.json(buildAdjustPrompt(ui.formDraft, instruction));
+        if (result.base) ui.formDraft.base = result.base;
+        if (result.method) ui.formDraft.method = result.method;
+        if (result.notes != null) ui.formDraft.notes = result.notes;
+        if (Array.isArray(result.dietFlags)) ui.formDraft.dietFlags = mapDietFlags(result.dietFlags);
+        if (Array.isArray(result.ingredients)) ui.formDraft.ingredients = mapIngredients(result.ingredients);
+        ui.adjusting = false;
+        ui.adjustInstruction = '';
+        ui.adjustApplied = true;
+        render();
+      } catch(e){
+        ui.adjusting = false;
+        ui.adjustError = sampleErrorMessage(e);
+        render();
+      }
+    },
     manualFromImport: function(){
+      resetAdjustState();
       var m = blankMeal();
       m.method = ui.importRawText; m.sourceUrl = ui.importSourceUrl;
       ui.formDraft = m; ui.formOpen = true; render();
@@ -1053,6 +1160,7 @@
         if (!ing.flag){ var auto = autoFlagIngredient(ing.item); if (auto){ ing.flag = auto.flag; ing.substitute = ing.substitute || auto.substitute; } }
       });
       saveMeal(d);
+      resetAdjustState();
       ui.formOpen = false; ui.formDraft = null;
       ui.importRawText = ''; ui.importSourceUrl = ''; ui.importError = null;
       render();
