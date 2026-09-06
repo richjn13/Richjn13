@@ -1,0 +1,1750 @@
+<title>Meal Planner</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:wght@400&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+<style>
+  /* Palette: white ground, olive as the structural/brand colour, terracotta for
+     action, navy for information. Semantic red is kept distinct from terracotta
+     so a warning never reads as a button. */
+  :root{
+    --paper: #FFFFFF;
+    --card: #FFFFFF;
+    --card-2: #F7F8F5;
+    --ink: #1B231E;
+    --ink-soft: #67716A;
+    --line: #E4E8E0;
+    --line-strong: #CFD6CA;
+    --olive: #4A5D3A;
+    --olive-ink: #F4F7F0;
+    --olive-tint: #EDF1E7;
+    --terracotta: #C05F3C;
+    --terracotta-ink: #FFF7F3;
+    --terracotta-tint: #FAEBE4;
+    --navy: #24406B;
+    --navy-ink: #F2F6FC;
+    --navy-tint: #E7EDF6;
+    --danger: #B3261E;
+    --neutral-tint: #F0F1EE;
+    --shadow: 0 1px 2px rgba(27,35,30,0.05);
+    --shadow-lift: 0 10px 30px -12px rgba(27,35,30,0.28);
+    /* Accent aliases kept so existing rules stay honest about their intent. */
+    --accent: var(--terracotta);
+    --accent-ink: var(--terracotta-ink);
+    --accent-2: var(--olive);
+    --forest: var(--olive);
+    --forest-ink: var(--olive-ink);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper: #131614; --card: #1B1F1C; --card-2: #222722;
+      --ink: #ECEFEA; --ink-soft: #9AA69C; --line: #2E352F; --line-strong: #3C453D;
+      --olive: #9BBB7E; --olive-ink: #16200F; --olive-tint: #24301C;
+      --terracotta: #E08A66; --terracotta-ink: #2A1207; --terracotta-tint: #3A2118;
+      --navy: #8FB0E0; --navy-ink: #0F1A2B; --navy-tint: #1C2839;
+      --danger: #EF9A92; --neutral-tint: #292E2A;
+      --shadow: 0 1px 2px rgba(0,0,0,0.4);
+      --shadow-lift: 0 10px 30px -12px rgba(0,0,0,0.7);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper: #131614; --card: #1B1F1C; --card-2: #222722;
+    --ink: #ECEFEA; --ink-soft: #9AA69C; --line: #2E352F; --line-strong: #3C453D;
+    --olive: #9BBB7E; --olive-ink: #16200F; --olive-tint: #24301C;
+    --terracotta: #E08A66; --terracotta-ink: #2A1207; --terracotta-tint: #3A2118;
+    --navy: #8FB0E0; --navy-ink: #0F1A2B; --navy-tint: #1C2839;
+    --danger: #EF9A92; --neutral-tint: #292E2A;
+    --shadow: 0 1px 2px rgba(0,0,0,0.4);
+    --shadow-lift: 0 10px 30px -12px rgba(0,0,0,0.7);
+  }
+
+  *{box-sizing:border-box;}
+  body{ background:var(--paper); color:var(--ink); font-family:"Manrope", ui-sans-serif, system-ui, sans-serif; line-height:1.5; -webkit-font-smoothing:antialiased; }
+  h1,h2,h3,h4{ text-wrap:balance; margin:0; font-family:"Manrope", ui-sans-serif, system-ui, sans-serif; letter-spacing:-0.015em; }
+  .serif{ font-family:"Instrument Serif", Georgia, serif; letter-spacing:0; }
+  .mono{ font-family:"JetBrains Mono", ui-monospace, monospace; letter-spacing:0.02em; }
+  .wrap{ max-width:1020px; margin:0 auto; padding:28px 18px 88px; }
+  a{color:var(--navy);}
+  button, input, select, textarea{ font-family:inherit; }
+  :focus-visible{ outline:2px solid var(--terracotta); outline-offset:2px; }
+  @media (prefers-reduced-motion: reduce){ *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;} }
+
+  .topbar{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; padding-bottom:16px; }
+  .brand{display:flex; align-items:baseline; gap:10px;}
+  .brand h1{ font-family:"Instrument Serif", Georgia, serif; font-size:1.85rem; font-weight:400; color:var(--olive); letter-spacing:0; }
+  .brand .tag{font-size:0.64rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--ink-soft);}
+
+  .tabs{ display:flex; gap:2px; margin-bottom:24px; border-bottom:1px solid var(--line); }
+  .tab{ background:none; border:none; padding:9px 14px; font-size:0.88rem; font-weight:600; color:var(--ink-soft); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:color 0.12s ease; }
+  .tab.active{ color:var(--terracotta); border-bottom-color:var(--terracotta); }
+  .tab:hover{ color:var(--ink); }
+  .tab.active:hover{ color:var(--terracotta); }
+
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px; }
+  .hero{ text-align:center; display:flex; flex-direction:column; align-items:center; gap:14px; padding:52px 28px; }
+  .hero h2{ font-family:"Instrument Serif", Georgia, serif; font-weight:400; font-size:2rem; max-width:22ch; letter-spacing:0; }
+  .hero p{max-width:48ch; color:var(--ink-soft); font-size:0.95rem;}
+  .eyebrow{ font-size:0.66rem; text-transform:uppercase; letter-spacing:0.12em; color:var(--olive); font-weight:700; }
+
+  .btn{ border:1px solid transparent; border-radius:9px; padding:10px 18px; font-size:0.88rem; font-weight:600; cursor:pointer; transition:background 0.12s ease, border-color 0.12s ease; }
+  .btn-primary{ background:var(--terracotta); color:var(--terracotta-ink); }
+  .btn-primary:hover{ filter:brightness(1.07); }
+  .btn-forest{ background:var(--olive); color:var(--olive-ink); }
+  .btn-forest:hover{ filter:brightness(1.07); }
+  .btn-navy{ background:var(--navy); color:var(--navy-ink); }
+  .btn-ghost{ background:transparent; border-color:var(--line-strong); color:var(--ink); }
+  .btn-ghost:hover{ border-color:var(--olive); color:var(--olive); }
+  .btn-danger{ background:transparent; border-color:var(--danger); color:var(--danger); }
+  .btn-sm{ padding:6px 12px; font-size:0.78rem; border-radius:8px; }
+  .btn-link{ background:none; border:none; color:var(--navy); text-decoration:underline; text-underline-offset:2px; cursor:pointer; padding:0; font-size:0.8rem; }
+  .btn-link:hover{ color:var(--terracotta); }
+  .btn[disabled]{ opacity:0.45; cursor:default; }
+  .row-actions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+
+  .section-head{ display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+  .section-head h2{font-size:1.25rem; font-weight:700;}
+  .muted{ color:var(--ink-soft); font-size:0.85rem; }
+
+  .chip{ font-size:0.62rem; text-transform:uppercase; letter-spacing:0.05em; padding:3px 9px; border-radius:999px; font-weight:700; white-space:nowrap; }
+  .chip.tier-often{ background:var(--olive-tint); color:var(--olive); }
+  .chip.tier-sometimes{ background:var(--navy-tint); color:var(--navy); }
+  .chip.tier-rarely{ background:var(--terracotta-tint); color:var(--terracotta); }
+  .chip.tier-unranked{ background:var(--neutral-tint); color:var(--ink-soft); }
+  .chip.flag{ background:var(--terracotta-tint); color:var(--terracotta); }
+  .chip.in-week{ background:var(--olive-tint); color:var(--olive); }
+  .rank-label{ font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-soft); font-weight:700; }
+  .tier-select{ font-size:0.74rem; font-weight:600; border:1px solid var(--line-strong); border-radius:7px;
+    padding:3px 5px; background:var(--card); color:var(--ink); cursor:pointer; max-width:130px; }
+  .tier-select:hover, .tier-select:focus{ border-color:var(--olive); }
+
+  /* meals list */
+  .filters{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+  .filters select, .filters input[type="search"]{ border:1px solid var(--line-strong); background:var(--card); color:var(--ink); border-radius:9px; padding:8px 11px; font-size:0.82rem; }
+  .meal-list{ display:flex; flex-direction:column; gap:10px; }
+  .meal-row-wrap{ display:flex; flex-direction:column; gap:8px; }
+  .meal-row{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; transition:border-color 0.12s ease; }
+  .meal-row:hover{ border-color:var(--line-strong); }
+  .meal-row .m-name-btn{ background:none; border:none; padding:0; cursor:pointer; text-align:left; color:var(--ink); font-weight:700; font-size:1.02rem; letter-spacing:-0.01em; }
+  .meal-row .m-name-btn:hover{ color:var(--terracotta); }
+  .meal-row .m-meta{ display:flex; gap:7px; flex-wrap:wrap; align-items:center; margin-top:6px; }
+  .meal-row .m-info{ flex:1; min-width:200px; }
+  .empty-state{ text-align:center; padding:44px 20px; color:var(--ink-soft); }
+  .meal-detail{ background:var(--card-2); border:1px solid var(--line); border-radius:12px; padding:16px 18px; }
+  .detail-block{ margin-bottom:14px; }
+  .detail-block:last-child{ margin-bottom:0; }
+  .detail-block h4{ font-size:0.66rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--ink-soft); margin-bottom:6px; }
+  .detail-text{ white-space:pre-wrap; font-size:0.9rem; }
+  .ing-list{ margin:0; padding-left:18px; font-size:0.9rem; }
+  .ing-list li{ margin-bottom:6px; }
+
+  /* form */
+  .field{ margin-bottom:14px; }
+  .field label, .field-label{ display:block; font-size:0.66rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--ink-soft); font-weight:700; margin-bottom:5px; }
+  .field input[type="text"], .field input[type="number"], .field input[type="date"], .field input[type="url"], .field select, .field textarea{
+    width:100%; border:1px solid var(--line-strong); background:var(--card); color:var(--ink); border-radius:9px; padding:10px 11px; font-size:0.9rem;
+  }
+  .field textarea{ min-height:96px; resize:vertical; line-height:1.55; }
+  .grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width:640px){ .grid-2{ grid-template-columns:1fr; } }
+  fieldset{ border:1px solid var(--line); border-radius:12px; padding:16px; margin:0 0 18px; }
+  legend{ font-size:0.66rem; text-transform:uppercase; letter-spacing:0.1em; font-weight:700; color:var(--ink-soft); padding:0 6px; }
+  .sub-row{ display:grid; grid-template-columns: 1.4fr 0.7fr 0.7fr 1fr auto 1fr auto; gap:6px; align-items:center; margin-bottom:8px; }
+  .sub-row input, .sub-row select{ border:1px solid var(--line-strong); background:var(--card); color:var(--ink); border-radius:7px; padding:7px 8px; font-size:0.8rem; width:100%; }
+  @media (max-width:800px){ .sub-row{ grid-template-columns:1fr 1fr; } }
+  .diet-row{ display:grid; grid-template-columns:1fr 1fr auto; gap:6px; margin-bottom:8px; }
+  .diet-row input{ border:1px solid var(--line-strong); background:var(--card); color:var(--ink); border-radius:7px; padding:7px 8px; font-size:0.8rem; }
+  .form-actions{ display:flex; justify-content:space-between; gap:10px; margin-top:18px; flex-wrap:wrap; }
+  .adjust-fieldset{ background:var(--card-2); }
+  .adjust-row{ display:flex; gap:8px; flex-wrap:wrap; }
+  .adjust-row input{ flex:1; min-width:200px; border:1px solid var(--line-strong); background:var(--card); color:var(--ink); border-radius:9px; padding:10px 11px; font-size:0.88rem; }
+
+  /* import */
+  .drop-note{ font-size:0.8rem; color:var(--ink-soft); margin-top:6px; }
+  input[type="file"]{ font-size:0.82rem; color:var(--ink-soft); }
+
+  /* overlay / picker */
+  .overlay{ position:fixed; inset:0; background:rgba(20,26,21,0.42); display:flex; align-items:flex-end; justify-content:center; z-index:30; }
+  @media (min-width:640px){ .overlay{ align-items:center; padding:20px; } }
+  .sheet{ background:var(--card); width:100%; max-width:660px; max-height:88vh; overflow-y:auto; border-radius:18px 18px 0 0; padding:22px 22px 28px; box-shadow:var(--shadow-lift); }
+  @media (min-width:640px){ .sheet{ border-radius:16px; } }
+  .sheet-head{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; }
+  .sheet-head h3{ font-size:1.15rem; font-weight:700; }
+  .close-x{ background:none; border:none; color:var(--ink-soft); font-size:1.4rem; line-height:1; cursor:pointer; padding:0 4px; }
+  .close-x:hover{ color:var(--terracotta); }
+  .pick-option{ width:100%; display:flex; justify-content:space-between; align-items:center; gap:10px; background:transparent; border:1px solid var(--line); border-radius:10px; padding:11px 13px; cursor:pointer; text-align:left; color:var(--ink); }
+  .pick-option:hover{ border-color:var(--olive); background:var(--olive-tint); }
+  .pick-row{ margin-bottom:8px; }
+  .pick-main{ display:flex; align-items:center; gap:8px; }
+  .pick-main .pick-option{ flex:1; }
+  .pick-view-btn{ white-space:nowrap; flex:none; }
+
+  /* week */
+  .slots{ display:flex; flex-direction:column; gap:10px; margin-bottom:18px; }
+  .slot{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+  .slot .m-name{ font-weight:700; font-size:1rem; letter-spacing:-0.01em; }
+  .slot .m-meta{ display:flex; gap:7px; flex-wrap:wrap; align-items:center; margin-top:6px; }
+  .slot-empty-btn{ flex:1; border:1.5px dashed var(--line-strong); border-radius:10px; background:none; color:var(--ink-soft); padding:16px; cursor:pointer; text-align:center; font-size:0.85rem; font-weight:600; }
+  .slot-empty-btn:hover{ border-color:var(--terracotta); color:var(--terracotta); }
+  .loose-note{ font-size:0.82rem; color:var(--ink-soft); text-align:center; margin-bottom:18px; }
+  .warnbox{ border-radius:12px; padding:13px 15px; margin-bottom:14px; font-size:0.85rem; border:1px solid transparent; }
+  .warnbox.warn{ background:var(--terracotta-tint); color:var(--terracotta); border-color:var(--terracotta); }
+  .warnbox.info{ background:var(--navy-tint); color:var(--navy); border-color:var(--navy); }
+  .warnbox ul{ margin:4px 0 0; padding-left:18px; }
+  .warnbox strong{ color:inherit; }
+
+  /* grocery */
+  .g-section{ margin-bottom:20px; }
+  .g-section h3{ font-size:0.7rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--ink-soft); display:flex; justify-content:space-between; align-items:center; gap:10px; border-bottom:1px solid var(--line); padding-bottom:7px; margin-bottom:8px; }
+  .g-item{ display:flex; align-items:flex-start; gap:12px; padding:10px 2px; border-bottom:1px solid var(--line); }
+  .g-item:last-child{ border-bottom:none; }
+  .g-item input[type="checkbox"]{ width:22px; height:22px; margin-top:1px; flex:none; accent-color:var(--olive); }
+  .g-item.checked .g-name{ text-decoration:line-through; color:var(--ink-soft); }
+  .g-name{ font-weight:600; font-size:0.92rem; }
+  .g-meta{ font-size:0.76rem; color:var(--ink-soft); }
+  .breakdown-list{ margin:3px 0 0; padding-left:16px; font-size:0.76rem; color:var(--ink-soft); }
+  .breakdown-list li{ margin-bottom:1px; }
+  .g-flag{ font-size:0.76rem; color:var(--danger); margin-top:3px; }
+  .toast{ position:fixed; bottom:22px; left:50%; transform:translateX(-50%); background:var(--olive); color:var(--olive-ink); padding:11px 20px; border-radius:999px; font-size:0.85rem; font-weight:600; box-shadow:var(--shadow-lift); z-index:50; }
+  .copy-fallback textarea{ width:100%; min-height:120px; margin-top:8px; border:1px solid var(--line-strong); border-radius:9px; padding:9px; background:var(--card); color:var(--ink); font-family:"JetBrains Mono", monospace; font-size:0.78rem; }
+
+  .footnote{ margin-top:30px; text-align:center; font-size:0.75rem; color:var(--ink-soft); }
+</style>
+
+<div class="wrap" id="app"></div>
+
+<script>
+(function(){
+  // ---------- constants ----------
+  var SECTIONS = ['produce','protein','dairy-and-chilled','tins-and-dry-goods','freezer','other'];
+  var SECTION_LABELS = { 'produce':'Produce', 'protein':'Protein', 'dairy-and-chilled':'Dairy & chilled', 'tins-and-dry-goods':'Tins & dry goods', 'freezer':'Freezer', 'other':'Everything else' };
+  var TIERS = ['often','sometimes','rarely','unranked'];
+  var TIER_LABELS = { often:'Often', sometimes:'Sometimes', rarely:'Rarely', unranked:'Unranked' };
+  // Household dietary restrictions. Gluten-free is the one structural rule tied
+  // to specific culinary substitutes (a whole category of easy-miss ingredients
+  // with well-established swaps); everything else below is a specific allergen
+  // to avoid, each checked against a short list of keywords likely to appear in
+  // an ingredient name. Order matters: more specific/named items are checked
+  // before broad categories (cow-milk, gluten) so e.g. "cashew milk" flags as
+  // cashew, not cow-milk, and "fresh pasta" flags for egg white before the
+  // plain "pasta" gluten check gets to it.
+  var FLAG_LABELS = {
+    'not-gluten-free': 'Not gluten-free',
+    'egg-white': 'Contains egg white',
+    'flaxseed': 'Contains flaxseed/linseed',
+    'cashew': 'Contains cashew',
+    'pistachio': 'Contains pistachio',
+    'hazelnut': 'Contains hazelnut',
+    'mushroom': 'Contains mushroom',
+    'gliadin': 'Contains gliadin',
+    'orange': 'Contains orange',
+    'cuttlefish': 'Contains cuttlefish',
+    'brewers-yeast': 'Contains brewer’s yeast',
+    'lobster': 'Contains lobster',
+    'cow-milk': 'Contains cow’s milk'
+  };
+
+  // Flags written by earlier versions of the app, before the household rules
+  // changed. Mapped on read so old records never render as "undefined";
+  // not-vegan is dropped outright, since this household isn't vegan.
+  var LEGACY_FLAG_MAP = { 'contains-egg': 'egg-white', 'not-vegan': null };
+  function migrateFlag(flag){
+    if (!flag) return null;
+    if (Object.prototype.hasOwnProperty.call(LEGACY_FLAG_MAP, flag)) return LEGACY_FLAG_MAP[flag];
+    return flag;
+  }
+  // Never render a bare key (or "undefined") for a flag we don't have a label
+  // for — fall back to the key read as words.
+  function flagLabel(flag){
+    if (!flag) return '';
+    if (FLAG_LABELS[flag]) return FLAG_LABELS[flag];
+    var words = String(flag).replace(/[-_]+/g, ' ').trim();
+    return words.charAt(0).toUpperCase() + words.slice(1);
+  }
+
+  var RESTRICTION_HINTS = [
+    // Named allergens first, most specific keyword wins. `exclude` phrases veto a
+    // rule outright — that's what keeps "butter beans" and "coconut milk" out of
+    // the dairy rule and "flax egg" out of the egg rule.
+    { flag: 'flaxseed', keywords: ['flaxseed', 'flax seed', 'linseed', 'flax egg'], substitute: 'leave out or use a chia egg instead' },
+    { flag: 'cashew', keywords: ['cashew'], substitute: 'swap for sunflower or pumpkin seeds, or omit' },
+    { flag: 'pistachio', keywords: ['pistachio'], substitute: 'swap for sunflower or pumpkin seeds, or omit' },
+    { flag: 'hazelnut', keywords: ['hazelnut', 'filbert'], substitute: 'swap for sunflower or pumpkin seeds, or omit' },
+    { flag: 'mushroom', keywords: ['mushroom', 'mushrooms', 'porcini', 'shiitake', 'portobello', 'cremini'], substitute: 'swap for extra onion/pepper or butter beans for texture, or omit' },
+    { flag: 'gliadin', keywords: ['gliadin'], substitute: 'same as gluten-free — check for wheat-derived ingredients' },
+    { flag: 'orange', keywords: ['orange', 'oranges'], exclude: ['orange pepper', 'orange bell', 'orange-fleshed', 'orange sweet potato'], substitute: 'swap for lemon or another citrus if tolerated, or omit' },
+    { flag: 'cuttlefish', keywords: ['cuttlefish'], substitute: 'no confident substitute — omit or ask' },
+    { flag: 'brewers-yeast', keywords: ['brewer’s yeast', 'brewers yeast', "brewer's yeast"], substitute: 'check for hidden sources (some stocks, beers, spreads) — omit if present' },
+    { flag: 'lobster', keywords: ['lobster'], substitute: 'no confident substitute — omit or ask' },
+    // Egg white family — whole eggs carry the white, so treat "egg"/"eggs" generically as this flag.
+    { flag: 'egg-white', keywords: ['egg white', 'egg whites', 'meringue', 'egg wash', 'fresh pasta', 'mayonnaise', 'mayo', 'eggs', 'egg'],
+      exclude: ['eggplant', 'egg-free', 'egg free', 'eggless', 'flax egg', 'chia egg', 'vegan mayo'], substitute: 'use aquafaba or a flax egg' },
+    // Gluten-free family.
+    { flag: 'not-gluten-free', keywords: ['soy sauce'], substitute: 'use tamari' },
+    { flag: 'not-gluten-free', keywords: ['stock'], substitute: 'check the label or use a certified gluten-free stock' },
+    { flag: 'not-gluten-free', keywords: ['oats'], exclude: ['gluten-free oats', 'gluten free oats'], substitute: 'use certified gluten-free oats' },
+    { flag: 'not-gluten-free', keywords: ['gnocchi'], substitute: 'use gluten-free gnocchi' },
+    { flag: 'not-gluten-free', keywords: ['pasta', 'noodles'], exclude: ['gluten-free pasta', 'gluten free pasta', 'rice noodles', 'glass noodles'], substitute: 'use gluten-free pasta' },
+    { flag: 'not-gluten-free', keywords: ['tortilla', 'tortillas'], exclude: ['corn tortilla'], substitute: 'use corn or gluten-free tortillas' },
+    { flag: 'not-gluten-free', keywords: ['breadcrumbs'], substitute: 'use gluten-free breadcrumbs or crushed rice cakes' },
+    { flag: 'not-gluten-free', keywords: ['spice blend'], substitute: 'check the label — some blends use wheat as a filler' },
+    { flag: 'not-gluten-free', keywords: ['sauce'], exclude: ['tomato sauce', 'apple sauce', 'applesauce', 'cranberry sauce'], substitute: 'check the label — some sauces sneak in wheat' },
+    // Cow's milk / dairy family — broadest net, checked last.
+    { flag: 'cow-milk', keywords: ['cheese', 'yogurt', 'yoghurt', 'buttermilk', 'cream', 'butter', 'milk'],
+      exclude: [
+        'butternut', 'butter bean', 'butter lettuce', 'peanut butter', 'almond butter', 'cashew butter',
+        'sunflower butter', 'seed butter', 'nut butter', 'cocoa butter', 'shea butter', 'apple butter',
+        'vegan butter', 'dairy-free butter', 'coconut milk', 'coconut cream', 'coconut yogurt', 'oat milk',
+        'almond milk', 'soy milk', 'soya milk', 'rice milk', 'hemp milk', 'cashew milk', 'plant milk',
+        'plant-based milk', 'non-dairy', 'dairy-free', 'dairy free', 'cream of tartar', 'vegan cheese',
+        'milk thistle'
+      ],
+      substitute: 'use a plant-based version (oat, soy or almond)' }
+  ];
+
+  // Flag <option> list, including any value already on the ingredient that isn't
+  // one of ours, so an unrecognized flag survives an edit instead of being reset.
+  function flagOptions(current){
+    var keys = Object.keys(FLAG_LABELS);
+    if (current && keys.indexOf(current) === -1) keys.push(current);
+    return keys.map(function(fl){
+      return '<option value="'+escapeHtml(fl)+'"'+(current===fl?' selected':'')+'>'+escapeHtml(flagLabel(fl))+'</option>';
+    }).join('');
+  }
+
+  // Whole-word match, so "butternut squash" isn't butter and "eggplant" isn't egg.
+  // A trailing s/es is allowed so plurals ("hazelnuts", "tortillas") still match —
+  // that only extends the end of the word, so the boundary protections hold.
+  function matchesKeyword(name, keyword){
+    var esc = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp('(^|[^a-z])' + esc + '(?:e?s)?([^a-z]|$)', 'i').test(name);
+  }
+
+  function autoFlagIngredient(name){
+    var n = (name||'').toLowerCase().trim();
+    if (!n) return null;
+    for (var i=0;i<RESTRICTION_HINTS.length;i++){
+      var rule = RESTRICTION_HINTS[i];
+      var vetoed = false;
+      if (rule.exclude){
+        for (var x=0;x<rule.exclude.length;x++){
+          if (n.indexOf(rule.exclude[x]) !== -1){ vetoed = true; break; }
+        }
+      }
+      if (vetoed) continue;
+      for (var j=0;j<rule.keywords.length;j++){
+        if (matchesKeyword(n, rule.keywords[j])) return { flag: rule.flag, substitute: rule.substitute };
+      }
+    }
+    return null;
+  }
+
+  function escapeHtml(s){
+    return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; });
+  }
+  function uid(){ return 'id'+Date.now()+Math.random().toString(16).slice(2); }
+  function daysSince(dateStr){ if (!dateStr) return Infinity; var d = new Date(dateStr+'T00:00:00'); if (isNaN(d.getTime())) return Infinity; return Math.floor((Date.now()-d.getTime())/86400000); }
+  function todayIso(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function mondayIso(){
+    var d = new Date(); var day = d.getDay(); var diff = (day===0?-6:1-day);
+    d.setDate(d.getDate()+diff); d.setHours(0,0,0,0);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
+  function blankMeal(){
+    return { id:null, name:'', base:'', effort:'', effortMinutes:'', tier:'unranked', servings:4, method:'', notes:'', sourceUrl:'', dietFlags:[], ingredients:[], lastCooked:'', timesCooked:0 };
+  }
+  function newIngredient(){ return { item:'', quantity:'', unit:'', section:'other', pantryStaple:false, flag:null, substitute:'' }; }
+  function newDietFlag(){ return { rule:'', substitute:'' }; }
+
+  // Coerces whatever a meal document actually holds into the shape every render
+  // function assumes. Applied at every point data enters the app (db snapshots,
+  // localStorage, AI extraction) so a malformed or missing field anywhere upstream
+  // (a bad AI response, an older record, hand-edited JSON) can never reach render()
+  // as undefined and take the whole page down with it.
+  function normalizeMeal(raw){
+    raw = raw || {};
+    return {
+      id: raw.id != null ? raw.id : null,
+      name: typeof raw.name === 'string' ? raw.name : '',
+      base: typeof raw.base === 'string' ? raw.base : '',
+      effort: typeof raw.effort === 'string' ? raw.effort : '',
+      effortMinutes: raw.effortMinutes != null ? raw.effortMinutes : '',
+      tier: TIERS.indexOf(raw.tier) !== -1 ? raw.tier : 'unranked',
+      servings: raw.servings || 4,
+      method: typeof raw.method === 'string' ? raw.method : '',
+      notes: typeof raw.notes === 'string' ? raw.notes : '',
+      sourceUrl: typeof raw.sourceUrl === 'string' ? raw.sourceUrl : '',
+      dietFlags: Array.isArray(raw.dietFlags) ? raw.dietFlags.map(function(f){
+        f = f || {};
+        return { rule: typeof f.rule === 'string' ? f.rule : '', substitute: typeof f.substitute === 'string' ? f.substitute : '' };
+      }) : [],
+      ingredients: Array.isArray(raw.ingredients) ? raw.ingredients.map(function(i){
+        i = i || {};
+        return {
+          item: typeof i.item === 'string' ? i.item : '',
+          quantity: i.quantity != null ? String(i.quantity) : '',
+          unit: typeof i.unit === 'string' ? i.unit : '',
+          section: SECTIONS.indexOf(i.section) !== -1 ? i.section : 'other',
+          pantryStaple: !!i.pantryStaple,
+          flag: migrateFlag(i.flag),
+          substitute: typeof i.substitute === 'string' ? i.substitute : ''
+        };
+      }) : [],
+      lastCooked: typeof raw.lastCooked === 'string' ? raw.lastCooked : '',
+      timesCooked: raw.timesCooked || 0,
+      createdAt: raw.createdAt, updatedAt: raw.updatedAt
+    };
+  }
+
+  // ---------- state ----------
+  var currentTab = 'week';
+  var meals = [];
+  var weekDoc = null; // { weekStart, mealIds:[], checkedItems:{} }
+  var db = null, sampleFn = null, localMode = false, sampleUnavailable = false;
+  var dataLoaded = false;
+  var ui = {
+    formOpen: false,
+    formDraft: null,
+    weekPickerOpen: false,
+    weekPickerSearch: '',
+    weekPickerFilterTier: '',
+    mealsFilter: { tier:'', search:'', sort:'name' },
+    importRawText: '', importSourceUrl: '', importDraft: null, importExtracting:false, importError:null, importPdfReading:false,
+    bulkRunning:false, bulkTotal:0, bulkDone:0, bulkFailed:[],
+    adjustInstruction:'', adjusting:false, adjustError:null, adjustApplied:false,
+    expandedMealId: null,
+    confirmDeleteId: null,
+    confirmNewWeek: false,
+    confirmAutoPick: false,
+    actionError: null,
+    formError: null,
+    formSaving: false,
+    linkUrl: '', linkDraft: false, linkSaving: false, linkError: null,
+    toast: null,
+    copyFallbackText: null
+  };
+
+  // ---------- storage: db capability, falls back to localStorage ----------
+  var LS_MEALS = 'mp_meals_v1', LS_WEEK = 'mp_week_v1';
+  function localGetMeals(){
+    try {
+      var list = JSON.parse(localStorage.getItem(LS_MEALS)||'[]');
+      return Array.isArray(list) ? list.map(normalizeMeal) : [];
+    } catch(e){ return []; }
+  }
+  // localStorage WRITES have to be guarded, not just reads: inside an iframe on
+  // iOS Safari with Prevent Cross-Site Tracking on (the default), touching
+  // localStorage throws SecurityError. Unguarded, every save threw and the edit
+  // silently disappeared.
+  function localWrite(key, value){
+    try { localStorage.setItem(key, JSON.stringify(value)); return true; }
+    catch(e){ throw new Error('This browser is blocking local storage for the page (' + (e && e.name ? e.name : 'storage error') + '), so nothing can be saved on this device.'); }
+  }
+  function localSaveMeals(list){ localWrite(LS_MEALS, list); meals = list; render(); }
+  function localGetWeek(){ try { return JSON.parse(localStorage.getItem(LS_WEEK)||'null'); } catch(e){ return null; } }
+  function localSaveWeek(w){ localWrite(LS_WEEK, w); weekDoc = w; render(); }
+
+  // Every write returns a promise now. Nothing swallows a rejection: a failed
+  // save has to be visible, because the alternative — closing the form and
+  // discarding the draft as though it worked — is indistinguishable from the app
+  // simply ignoring you.
+  function saveMeal(meal){
+    var toWrite = JSON.parse(JSON.stringify(meal));
+    var id = toWrite.id; delete toWrite.id;
+    toWrite.updatedAt = Date.now();
+    if (!id){ toWrite.createdAt = Date.now(); }
+    if (db){
+      return id ? db.doc('meals/'+id).set(toWrite) : db.collection('meals').add(toWrite);
+    }
+    var list = localGetMeals();
+    if (id){
+      var idx = list.findIndex(function(m){ return m.id===id; });
+      if (idx>=0) list[idx] = Object.assign({id:id}, toWrite);
+      else { toWrite.id = id; list.push(toWrite); }
+    } else {
+      toWrite.id = uid();
+      list.push(toWrite);
+    }
+    localSaveMeals(list);
+    return Promise.resolve();
+  }
+  function deleteMeal(id){
+    if (db) return db.doc('meals/'+id).delete();
+    localSaveMeals(localGetMeals().filter(function(m){ return m.id!==id; }));
+    return Promise.resolve();
+  }
+  function saveWeek(w){
+    if (db) return db.doc('week/current').set(w);
+    localSaveWeek(w);
+    return Promise.resolve();
+  }
+  function updateWeek(partial){
+    var cur = weekDoc || { weekStart: mondayIso(), mealIds: [], checkedItems: {} };
+    var next = Object.assign({}, cur, partial);
+    return saveWeek(next).catch(function(err){ reportActionError(err); });
+  }
+
+  async function initStore(){
+    var namespace = null, sampleNs = null;
+    try { if (window.claude && window.claude.use) namespace = await window.claude.use('db'); } catch(e){ namespace = null; }
+    try { if (window.claude && window.claude.use) sampleNs = await window.claude.use('sample'); } catch(e){ sampleNs = null; }
+    sampleFn = sampleNs;
+
+    if (!namespace){
+      localMode = true;
+      meals = localGetMeals();
+      weekDoc = localGetWeek();
+      dataLoaded = true;
+      render();
+      return;
+    }
+    db = namespace;
+    db.collection('meals').onSnapshot(function(qs){
+      meals = qs.docs.map(function(d){ return normalizeMeal(Object.assign({id:d.id}, d.data())); });
+      dataLoaded = true;
+      render();
+    }, function(err){ fallBackToLocal(err); });
+    db.doc('week/current').onSnapshot(function(snap){
+      weekDoc = snap.exists ? snap.data() : null;
+      dataLoaded = true;
+      render();
+    }, function(err){ fallBackToLocal(err); });
+  }
+
+  // The shared store died mid-session. `db` MUST be cleared here, not just
+  // localMode set: leaving it set sent writes to the dead database while the
+  // list rendered from localStorage, so every edit landed somewhere the app
+  // never read back — saving appeared to do nothing at all.
+  function fallBackToLocal(err){
+    if (localMode && !db) return;
+    db = null;
+    localMode = true;
+    meals = localGetMeals();
+    weekDoc = localGetWeek();
+    dataLoaded = true;
+    ui.actionError = 'Lost the shared list' + (err && err.code ? ' ('+err.code+')' : '') +
+      ' — still working on this device, but changes won’t sync until you reload.';
+    render();
+  }
+
+  // ---------- rules engine ----------
+  function computeWarnings(selected){
+    var warnings = [], infos = [];
+    if (selected.length < 5) warnings.push('Only '+selected.length+' of 5 picked so far.');
+    if (selected.length === 5){
+      var tierCounts = { often:0, sometimes:0, rarely:0, unranked:0 };
+      selected.forEach(function(m){ tierCounts[m.tier||'unranked']++; });
+      if ((tierCounts.rarely + tierCounts.unranked) === 0) warnings.push('Nothing from rarely or unranked this week — the list stops moving if it’s always the same meals.');
+      if (tierCounts.often === 0) infos.push('No “often” meals this week — fine occasionally, worth noticing if it keeps happening.');
+    }
+    var longCooks = selected.filter(function(m){ return (parseFloat(m.effortMinutes)||0) >= 45; }).length;
+    if (longCooks >= 4) warnings.push('That’s '+longCooks+' long cooks this week — might be a lot on top of everything else.');
+    var baseCounts = {};
+    selected.forEach(function(m){ var b=(m.base||'').toLowerCase().trim(); if (!b) return; baseCounts[b]=(baseCounts[b]||0)+1; });
+    Object.keys(baseCounts).forEach(function(b){ if (baseCounts[b] >= 3) warnings.push('Three or more of these lean on '+b+' — want more variety?'); });
+    selected.forEach(function(m){
+      var d = daysSince(m.lastCooked);
+      if (m.tier === 'sometimes' && d < 24) warnings.push(escapeHtml(m.name)+' was cooked '+d+' day'+(d===1?'':'s')+' ago — sometimes meals are usually spaced about a month apart.');
+      if (m.tier === 'rarely' && d < 75) warnings.push(escapeHtml(m.name)+' was cooked '+d+' day'+(d===1?'':'s')+' ago — rarely meals are usually spaced further apart than that.');
+    });
+    var itemCount = {};
+    selected.forEach(function(m){ (m.ingredients||[]).forEach(function(i){ var k=(i.item||'').toLowerCase().trim(); if (!k) return; itemCount[k]=(itemCount[k]||0)+1; }); });
+    var shared = Object.keys(itemCount).filter(function(k){ return itemCount[k] >= 2; }).length;
+    if (shared > 0) infos.push(shared+' ingredient'+(shared===1?'':'s')+' shared across two or more of these picks — one purchase covers both.');
+    return { warnings: warnings, infos: infos };
+  }
+
+  // Weighted-random auto-pick. Every meal starts at weight 1 (pure random) —
+  // as soon as tiers get set, "often" and "sometimes" pull ahead proportionally
+  // while "rarely"/"unranked" stay in the running, so the pick trends toward the
+  // household's actual rankings without ever fully excluding anything. A meal
+  // within its tier's cooldown window is heavily deprioritized (not excluded, so
+  // a short list of meals still produces 5 picks) rather than enforced as a rule.
+  var TIER_WEIGHT = { often: 4, sometimes: 2, rarely: 1, unranked: 1 };
+  function weightForAutoPick(m){
+    var w = TIER_WEIGHT[m.tier || 'unranked'] || 1;
+    var d = daysSince(m.lastCooked);
+    if (m.tier === 'sometimes' && d < 24) w *= 0.15;
+    if (m.tier === 'rarely' && d < 75) w *= 0.1;
+    return w;
+  }
+  function weightedPickWithoutReplacement(pool, n){
+    var candidates = pool.slice();
+    var chosen = [];
+    for (var k=0; k<n && candidates.length>0; k++){
+      var weights = candidates.map(weightForAutoPick);
+      var total = weights.reduce(function(a,b){ return a+b; }, 0);
+      if (total <= 0){ weights = candidates.map(function(){ return 1; }); total = candidates.length; }
+      var r = Math.random() * total;
+      var idx = 0;
+      for (; idx < weights.length; idx++){ r -= weights[idx]; if (r <= 0) break; }
+      if (idx >= candidates.length) idx = candidates.length - 1;
+      chosen.push(candidates[idx]);
+      candidates.splice(idx, 1);
+    }
+    return chosen;
+  }
+
+  function buildGroceryList(selected){
+    var combined = {};
+    selected.forEach(function(m){
+      var scale = 4 / (parseFloat(m.servings) || 4);
+      (m.ingredients||[]).forEach(function(ing){
+        if (!ing.item) return;
+        var key = ing.item.trim().toLowerCase()+'|'+(ing.unit||'').trim().toLowerCase();
+        if (!combined[key]){
+          combined[key] = { item: ing.item, unit: ing.unit||'', qtyNum:0, qtyKnown:true, rawParts:[], meals:[], breakdown:[], section: SECTIONS.indexOf(ing.section)>=0 ? ing.section : 'other', pantryStaple: true, flag: null, substitute: '' };
+        }
+        var c = combined[key];
+        if (c.meals.indexOf(m.name) === -1) c.meals.push(m.name);
+        if (ing.flag && !c.flag){ c.flag = ing.flag; c.substitute = ing.substitute || ''; }
+        if (!ing.pantryStaple) c.pantryStaple = false;
+
+        var qn = parseFloat(ing.quantity);
+        var contributionNum = null, contributionRaw = null;
+        if (ing.quantity !== '' && ing.quantity != null && !isNaN(qn)){
+          contributionNum = qn * scale;
+          c.qtyNum += contributionNum;
+        } else {
+          c.qtyKnown = false;
+          if (ing.quantity){ contributionRaw = ing.quantity; c.rawParts.push(ing.quantity); }
+        }
+        // Per-recipe breakdown so a combined line can still show which meal needs how much.
+        var existing = c.breakdown.filter(function(b){ return b.meal === m.name; })[0];
+        if (existing){
+          if (contributionNum != null && existing.num != null) existing.num += contributionNum;
+        } else {
+          c.breakdown.push({ meal: m.name, num: contributionNum, raw: contributionRaw, unit: ing.unit||'' });
+        }
+      });
+    });
+    var bySection = {}; SECTIONS.forEach(function(s){ bySection[s] = []; });
+    Object.keys(combined).forEach(function(k){
+      var item = combined[k];
+      item.waste = item.meals.length === 1 && !item.pantryStaple;
+      bySection[item.section].push(item);
+    });
+    SECTIONS.forEach(function(s){ bySection[s].sort(function(a,b){ return a.item.localeCompare(b.item); }); });
+    return bySection;
+  }
+  function formatBreakdownEntry(b){
+    if (b.num != null){
+      var n = Math.round(b.num*100)/100;
+      return n + (b.unit ? ' '+b.unit : '');
+    }
+    if (b.raw) return b.raw + (b.unit ? ' '+b.unit : '');
+    return b.unit || 'amount varies';
+  }
+
+  function formatQty(item){
+    if (item.qtyKnown && item.qtyNum){
+      var n = Math.round(item.qtyNum*100)/100;
+      return n + (item.unit ? ' '+item.unit : '');
+    }
+    if (item.rawParts.length) return item.rawParts.join(' + ') + (item.unit ? ' '+item.unit : '');
+    return item.unit || 'amount varies — check the recipe';
+  }
+
+  // ---------- clipboard ----------
+  async function copyText(text, label){
+    var ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; } catch(e){ ok = false; }
+    if (!ok){
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+      } catch(e){ ok = false; }
+    }
+    if (ok){
+      ui.toast = (label||'List')+' copied';
+      ui.copyFallbackText = null;
+      render();
+      setTimeout(function(){ ui.toast = null; render(); }, 2200);
+    } else {
+      ui.copyFallbackText = text;
+      render();
+    }
+  }
+  function groceryCopyText(bySection, onlyBuy){
+    var lines = [];
+    SECTIONS.forEach(function(s){
+      var items = bySection[s].filter(function(i){ return onlyBuy ? !i.pantryStaple : i.pantryStaple; });
+      if (!items.length) return;
+      lines.push('-- '+SECTION_LABELS[s]+' --');
+      items.forEach(function(item){
+        var detail = item.meals.length > 1
+          ? item.breakdown.map(function(b){ return formatBreakdownEntry(b)+' for '+b.meal; }).join(', ')
+          : item.meals.join(', ');
+        var line = item.item+' — '+formatQty(item)+' ('+detail+')';
+        if (item.flag) line += ' [' + flagLabel(item.flag) + (item.substitute? ': '+item.substitute:'') + ']';
+        else if (item.substitute) line += ' [note: ' + item.substitute + ']';
+        lines.push(line);
+      });
+    });
+    return lines.join('\n');
+  }
+
+  // ---------- PDF + AI extraction ----------
+  async function extractPdfText(file){
+    if (typeof pdfjsLib === 'undefined') throw new Error('pdf-lib-unavailable');
+    if (!pdfjsLib.GlobalWorkerOptions.workerSrc){
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    }
+    var buf = await file.arrayBuffer();
+    var pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    var text = '';
+    for (var i=1;i<=pdf.numPages;i++){
+      var page = await pdf.getPage(i);
+      var content = await page.getTextContent();
+      text += content.items.map(function(it){ return it.str || ''; }).join(' ') + '\n';
+    }
+    return text.trim();
+  }
+
+  var FLAG_ENUM_STR = Object.keys(FLAG_LABELS).map(function(k){ return '"'+k+'"'; }).join('|');
+  var HOUSEHOLD_RULES_TEXT = 'Household dietary restrictions to flag against: strictly gluten-free (flag common gluten '
+    + 'culprits like soy sauce, stock, oats, pasta, gnocchi, tortillas, breadcrumbs, spice blends), plus these specific '
+    + 'allergens whenever they appear: egg white (treat whole eggs, mayonnaise, and meringue as this too — the white is '
+    + 'always present), flaxseed or linseed, cashew, pistachio, hazelnut, mushroom, gliadin, orange, cuttlefish, '
+    + 'brewer’s yeast, lobster, and cow’s milk (including cheese, yogurt, butter, and cream). This household is not '
+    + 'vegan — meat, fish and non-cow dairy are fine unless they trip one of the allergens above. Flag each affected '
+    + 'ingredient with the specific restriction it breaks and a substitute only where there is a genuinely safe, '
+    + 'well-established one — say there is no confident substitute rather than guessing for something like a shellfish '
+    + 'allergy.';
+
+  function buildExtractionPrompt(text, sourceUrl){
+    var schema = '{\n'
+      + ' "name": string,\n'
+      + ' "base": string (main protein or base, e.g. "chicken thighs", "butter beans"),\n'
+      + ' "effort": string (short human description, e.g. "Low, 30 min, one pan"),\n'
+      + ' "effortMinutes": number (best-guess total active+cook minutes),\n'
+      + ' "servings": number (as written, or 4 if unclear),\n'
+      + ' "method": string (numbered steps, one per line, in plain everyday language),\n'
+      + ' "dietFlags": [{"rule": string, "substitute": string}] for any of the household rules this dish breaks as written,\n'
+      + ' "ingredients": [{"item": string, "quantity": string, "unit": string, "section": "produce"|"protein"|"dairy-and-chilled"|"tins-and-dry-goods"|"freezer"|"other", "pantryStaple": boolean, "flag": ' + FLAG_ENUM_STR + '|null, "substitute": string}]\n'
+      + '}';
+    return 'You are filling in a structured recipe record for a household meal-planning app.\n\n'
+      + HOUSEHOLD_RULES_TEXT + '\n\n'
+      + 'Reply with ONLY a JSON object with exactly this shape, no other text:\n' + schema + '\n\n'
+      + 'Recipe text:\n"""\n' + text.slice(0,6000) + '\n"""'
+      + (sourceUrl ? ('\n\nOriginal source (context only, do not fetch it): ' + sourceUrl) : '');
+  }
+
+  function mapDietFlags(list){
+    return Array.isArray(list) ? list.map(function(f){ return { rule: f.rule||'', substitute: f.substitute||'' }; }) : [];
+  }
+  function mapIngredients(list){
+    return Array.isArray(list) ? list.map(function(i){
+      var flag = migrateFlag(i.flag), sub = i.substitute || '';
+      if (!flag){ var auto = autoFlagIngredient(i.item); if (auto){ flag = auto.flag; sub = sub || auto.substitute; } }
+      return { item: i.item||'', quantity: String(i.quantity!=null?i.quantity:''), unit: i.unit||'', section: SECTIONS.indexOf(i.section)!==-1 ? i.section : 'other', pantryStaple: !!i.pantryStaple, flag: flag||null, substitute: sub };
+    }) : [];
+  }
+  // Clears the transient state that belongs to one visit to the meal form, so a
+  // stale error or a stuck "Saving…" never carries over into the next meal.
+  // Best-effort dish name from a recipe URL's own slug — the one piece of the
+  // page we can actually read, since the sandbox won't let us fetch it.
+  function deriveNameFromUrl(url){
+    var raw = String(url || '').trim();
+    if (!raw) return '';
+    var path = raw.replace(/^[a-z]+:\/\//i, '').replace(/[?#].*$/, '');
+    var parts = path.split('/');
+    parts.shift(); // the host is never the dish name
+    parts = parts.filter(function(p){ return p && !/\.[a-z]{2,5}$/i.test(p); });
+    if (!parts.length) return '';
+    var slug = parts[parts.length-1];
+    // A trailing numeric id isn't the dish; fall back to the segment before it.
+    if (/^\d+$/.test(slug) && parts.length > 1) slug = parts[parts.length-2];
+    if (!slug) return '';
+    var words = slug.replace(/[-_+]+/g, ' ').replace(/\s+/g, ' ').trim()
+      .replace(/^\d+\s+/, '').replace(/\s+\d{4,}$/, '');
+    if (!words) return '';
+    return words.split(' ').map(function(w){
+      return w.length > 2 ? w.charAt(0).toUpperCase() + w.slice(1) : w;
+    }).join(' ');
+  }
+
+  function resetAdjustState(){
+    ui.adjustInstruction = ''; ui.adjusting = false; ui.adjustError = null; ui.adjustApplied = false;
+    ui.formError = null; ui.formSaving = false;
+  }
+  function draftToMeal(draft, sourceUrl){
+    var m = blankMeal();
+    m.name = draft.name || ''; m.base = draft.base || ''; m.effort = draft.effort || '';
+    m.effortMinutes = draft.effortMinutes || ''; m.servings = draft.servings || 4;
+    m.method = draft.method || '';
+    m.sourceUrl = sourceUrl || '';
+    m.dietFlags = mapDietFlags(draft.dietFlags);
+    m.ingredients = mapIngredients(draft.ingredients);
+    return m;
+  }
+
+  // Drafting from a link we cannot open. The prompt has to be explicit that this
+  // is reconstruction from a name, not retrieval — and the result is labelled as
+  // such in the saved record, because guessing at ingredients for a household
+  // with a real allergy list is only safe if everyone knows it's a guess.
+  function buildLinkDraftPrompt(name, url){
+    return 'A household meal-planning app saved a recipe link but CANNOT open the page. '
+      + 'Write a plausible starting-point version of this dish from the name alone, so the household has something to edit.\n\n'
+      + 'Dish name (taken from the link): ' + name + '\n'
+      + 'Link (for context only — you cannot read it, do not pretend to): ' + url + '\n\n'
+      + HOUSEHOLD_RULES_TEXT + '\n\n'
+      + 'Reply with ONLY a JSON object of this shape, no other text:\n'
+      + '{ "name": string, "base": string, "effort": string, "effortMinutes": number, "servings": number, '
+      + '"method": string (numbered steps, one per line), "notes": string (say plainly this is reconstructed from the name, not the linked page), '
+      + '"dietFlags": [{"rule": string, "substitute": string}], '
+      + '"ingredients": [{"item": string, "quantity": string, "unit": string, '
+      + '"section": "produce"|"protein"|"dairy-and-chilled"|"tins-and-dry-goods"|"freezer"|"other", '
+      + '"pantryStaple": boolean, "flag": ' + FLAG_ENUM_STR + '|null, "substitute": string} ] }';
+  }
+
+  function buildAdjustPrompt(draft, instruction){
+    var current = {
+      name: draft.name, base: draft.base, servings: draft.servings,
+      method: draft.method, notes: draft.notes,
+      dietFlags: draft.dietFlags, ingredients: draft.ingredients
+    };
+    var schema = '{ "base": string, "method": string, "notes": string, '
+      + '"dietFlags": [{"rule": string, "substitute": string}], '
+      + '"ingredients": [{"item": string, "quantity": string, "unit": string, '
+      + '"section": "produce"|"protein"|"dairy-and-chilled"|"tins-and-dry-goods"|"freezer"|"other", '
+      + '"pantryStaple": boolean, "flag": ' + FLAG_ENUM_STR + '|null, "substitute": string} ] }';
+    return 'You are adjusting an existing recipe record for a household meal-planning app, based on a requested change.\n\n'
+      + HOUSEHOLD_RULES_TEXT + ' Respect these unless the requested change itself deliberately overrides one.\n\n'
+      + 'Current recipe (JSON):\n' + JSON.stringify(current, null, 2) + '\n\n'
+      + 'Requested change: ' + instruction + '\n\n'
+      + 'Reply with ONLY a JSON object with exactly this shape, reflecting the FULL recipe after applying the change '
+      + '(carry over any field the change does not affect unchanged, do not omit or shorten it):\n' + schema;
+  }
+
+  function sampleErrorMessage(e){
+    var code = e && e.code;
+    if (code==='not_granted' || code==='sampling_disabled' || code==='not_declared' || code==='capability_disabled' || code==='capability_removed'){
+      sampleUnavailable = true;
+      return 'AI extraction isn’t available in this view — fill in the fields below by hand.';
+    }
+    if (code==='rate_limited') return 'Too many requests right now — try again in a minute.';
+    if (code==='invalid_json') return 'Couldn’t get a clean structured answer — try again, or fill in the fields yourself.';
+    if (code==='cancelled') return null;
+    return 'Something went wrong reading that (' + (e && e.message ? e.message : 'unknown error') + ') — you can still fill in the fields by hand.';
+  }
+
+  // ---------- rendering ----------
+  // Every render() replaces #app's whole innerHTML (no virtual DOM), which would
+  // otherwise yank focus and cursor position out of whatever text field the
+  // household is mid-sentence in (search boxes, the import textarea). Capture and
+  // restore focus by element id across the rebuild so typing stays uninterrupted.
+  function render(){
+    var app = document.getElementById('app');
+    var focusInfo = null;
+    // Reading selectionStart/End THROWS (InvalidStateError) when the focused
+    // element is an input type that has no text selection — number and date,
+    // both of which the meal form uses (servings, effort minutes, times cooked,
+    // last cooked). Unguarded, that aborts the whole render and freezes the page
+    // on exactly the screen you're most likely to be typing in.
+    try {
+      var active = document.activeElement;
+      if (active && app.contains(active) && active.id){
+        var selStart = null, selEnd = null;
+        try { selStart = active.selectionStart; selEnd = active.selectionEnd; } catch(e){}
+        focusInfo = { id: active.id, start: selStart, end: selEnd };
+      }
+    } catch(e){ focusInfo = null; }
+    // If the meal form is already on screen, capture whatever's typed into it before
+    // rebuilding — a re-render can be triggered by the OTHER person's edit arriving
+    // over the shared db, not just a local click, and that must never erase typing
+    // that hasn't been explicitly saved yet.
+    if (ui.formOpen && ui.formDraft && document.getElementById('form-overlay')){
+      try { syncFormDraftFromDom(); } catch(e){}
+    }
+
+    // A crash anywhere in the render below (bad data, an edge case this code
+    // missed) used to leave the page frozen mid-rebuild with no way back short of
+    // reloading — which, since the bad state usually persists, reloaded straight
+    // into the same crash. This boundary catches that instead and offers a way
+    // back to a known-good screen.
+    try {
+      var html = header();
+      if (!dataLoaded){
+        html += '<div class="card hero"><p>Loading the list&hellip;</p></div>';
+        app.innerHTML = html;
+        return;
+      }
+      if (currentTab === 'week') html += renderWeekTab();
+      else if (currentTab === 'meals') html += renderMealsTab();
+      else if (currentTab === 'import') html += renderImportTab();
+
+      if (ui.formOpen) html += renderMealFormOverlay();
+      if (ui.weekPickerOpen) html += renderWeekPickerOverlay();
+      html += footnote();
+      if (ui.toast) html += '<div class="toast">'+escapeHtml(ui.toast)+'</div>';
+      app.innerHTML = html;
+    } catch(err){
+      app.innerHTML = header() + '<div class="card" style="margin-top:16px;">' +
+        '<h3 style="margin-bottom:8px;">Something went wrong showing this screen</h3>' +
+        '<p class="muted" style="margin-bottom:12px;">'+escapeHtml(err && err.message ? err.message : String(err))+'</p>' +
+        '<button class="btn btn-primary" data-action="recoverFromError">Back to This Week</button>' +
+      '</div>';
+      return;
+    }
+
+    if (focusInfo){
+      var el = document.getElementById(focusInfo.id);
+      if (el){
+        try { el.focus(); } catch(e){}
+        if (typeof focusInfo.start === 'number' && el.setSelectionRange){
+          try { el.setSelectionRange(focusInfo.start, focusInfo.end); } catch(e){}
+        }
+      }
+    }
+  }
+
+  function header(){
+    return '' +
+      '<div class="topbar"><div class="brand"><h1>Meal Planner</h1><span class="tag mono">household kitchen ops</span></div></div>' +
+      '<div class="tabs">' +
+        tabBtn('week','This Week') + tabBtn('meals','Meals') + tabBtn('import','Import') +
+      '</div>' +
+      (ui.actionError
+        ? '<div class="warnbox warn" style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">' +
+          '<span>That didn’t go through: '+escapeHtml(ui.actionError)+'</span>' +
+          '<button class="btn-link" data-action="dismissActionError">Dismiss</button></div>'
+        : '');
+  }
+  function tabBtn(key, label){
+    return '<button class="tab'+(currentTab===key?' active':'')+'" data-action="setTab" data-id="'+key+'">'+label+'</button>';
+  }
+  function footnote(){
+    return '<div class="footnote">' + (localMode ? 'Saved on this device only — open the same link on both phones to keep the shared list in sync.' : 'The meal list and this week’s plan sync live between both of you.') + '</div>';
+  }
+
+  // ---- Week tab ----
+  function getWeekIds(){
+    var ids = (weekDoc && weekDoc.mealIds) ? weekDoc.mealIds.slice() : [];
+    while (ids.length < 5) ids.push(null);
+    return ids.slice(0,5);
+  }
+  function selectedMeals(){
+    return getWeekIds().map(function(id){ return id ? meals.find(function(m){ return m.id===id; }) : null; }).filter(Boolean);
+  }
+  function renderWeekTab(){
+    var picked = selectedMeals();
+    var html = '';
+    if (meals.length === 0){
+      html += '<div class="card hero"><span class="eyebrow">nothing on the list yet</span>' +
+        '<h2>Add a few meals before you plan a week</h2>' +
+        '<p>Head to the Meals tab to add one by hand, or Import to pull one in from a recipe PDF or pasted text.</p>' +
+        '<button class="btn btn-primary" data-action="setTab" data-id="meals">Go to Meals</button></div>';
+      return html;
+    }
+    if (!weekDoc || !weekDoc.started){
+      html += '<div class="card hero"><span class="eyebrow">'+ (weekDoc ? 're-up for next week' : 'new here') +'</span>' +
+        '<h2>Ready to plan this week’s five?</h2>' +
+        '<p>Pick five meals for the week. Two nights are always yours &mdash; takeout, leftovers, eating out, whatever’s easiest.</p>' +
+        '<div class="row-actions" style="justify-content:center;">' +
+          '<button class="btn btn-primary" data-action="startWeek">Let’s pick</button>' +
+          '<button class="btn btn-ghost" data-action="autoPickWeek">Auto-pick for me</button>' +
+        '</div></div>';
+      return html;
+    }
+    var rules = computeWarnings(picked);
+    html += '<div class="section-head"><h2>This week’s five</h2>';
+    if (ui.confirmNewWeek){
+      html += '<span class="row-actions"><span class="muted">Clear this week’s picks?</span><button class="btn-link" data-action="confirmNewWeek">Yes, start fresh</button><button class="btn-link" data-action="cancelNewWeek">Cancel</button></span>';
+    } else if (ui.confirmAutoPick){
+      html += '<span class="row-actions"><span class="muted">Replace with a random pick?</span><button class="btn-link" data-action="autoPickWeek">Yes, auto-pick</button><button class="btn-link" data-action="cancelAutoPick">Cancel</button></span>';
+    } else {
+      html += '<span class="row-actions"><button class="btn btn-ghost btn-sm" data-action="autoPickWeek">Auto-pick</button>' +
+        '<button class="btn btn-ghost btn-sm" data-action="askNewWeek">Start a new week</button></span>';
+    }
+    html += '</div>';
+    html += '<div class="slots">';
+    var weekIds = getWeekIds();
+    for (var i=0;i<5;i++){
+      var mid = weekIds[i];
+      var m = mid ? meals.find(function(x){ return x.id===mid; }) : null;
+      if (m){
+        html += '<div class="slot"><div class="m-info">' +
+          '<div class="m-name">'+escapeHtml(m.name)+'</div>' +
+          '<div class="m-meta">' +
+            '<span class="chip tier-'+m.tier+'">'+TIER_LABELS[m.tier]+'</span>' +
+            (m.base ? '<span class="muted">'+escapeHtml(m.base)+'</span>' : '') +
+            (m.effort ? '<span class="muted mono">'+escapeHtml(m.effort)+'</span>' : '') +
+          '</div></div>' +
+          '<div class="row-actions"><button class="btn-link" data-action="openWeekPicker" data-id="'+i+'">swap</button>' +
+          '<button class="btn-link" data-action="removeFromWeek" data-id="'+i+'">remove</button></div>' +
+        '</div>';
+      } else {
+        html += '<div class="slot"><button class="slot-empty-btn" data-action="openWeekPicker" data-id="'+i+'">+ pick meal '+(i+1)+'</button></div>';
+      }
+    }
+    html += '</div>';
+    html += '<div class="loose-note">Five dinners planned &mdash; that leaves 2 nights open, on purpose.</div>';
+
+    if (rules.warnings.length){
+      html += '<div class="warnbox warn"><strong>Worth a look:</strong><ul>' + rules.warnings.map(function(w){ return '<li>'+w+'</li>'; }).join('') + '</ul></div>';
+    }
+    if (rules.infos.length){
+      html += '<div class="warnbox info"><ul>' + rules.infos.map(function(w){ return '<li>'+w+'</li>'; }).join('') + '</ul></div>';
+    }
+
+    if (picked.length > 0){
+      html += renderGrocerySection(picked);
+    }
+    return html;
+  }
+
+  function renderMealsLine(item){
+    if (item.meals.length > 1){
+      var lis = item.breakdown.map(function(b){
+        return '<li>'+escapeHtml(formatBreakdownEntry(b))+' for '+escapeHtml(b.meal)+'</li>';
+      }).join('');
+      return '<ul class="breakdown-list">'+lis+'</ul>';
+    }
+    return '<div class="g-meta">for '+escapeHtml(item.meals.join(', '))+(item.waste?' &middot; small amount for one meal, easy to waste':'')+'</div>';
+  }
+
+  function renderGrocerySection(picked){
+    var bySection = buildGroceryList(picked);
+    var checked = (weekDoc && weekDoc.checkedItems) || {};
+    var html = '<div class="section-head"><h2>Grocery list</h2>' +
+      '<div class="row-actions"><button class="btn btn-forest btn-sm" data-action="copyGrocery" data-id="buy">Copy buy list</button>' +
+      '<button class="btn btn-ghost btn-sm" data-action="copyGrocery" data-id="cupboard">Copy cupboard-check</button></div></div>';
+
+    if (ui.copyFallbackText){
+      html += '<div class="card copy-fallback"><div class="muted">Copy didn’t work automatically &mdash; select the text below and copy it manually.</div>' +
+        '<textarea readonly onclick="this.select()">'+escapeHtml(ui.copyFallbackText)+'</textarea></div>';
+    }
+
+    var hasBuy = false, hasCupboard = false;
+    SECTIONS.forEach(function(s){ bySection[s].forEach(function(i){ if (i.pantryStaple) hasCupboard = true; else hasBuy = true; }); });
+
+    html += '<div class="card"><h3 style="margin-bottom:10px;">To buy</h3>';
+    if (!hasBuy) html += '<div class="muted">Nothing to buy &mdash; everything’s a pantry check.</div>';
+    SECTIONS.forEach(function(s){
+      var items = bySection[s].filter(function(i){ return !i.pantryStaple; });
+      if (!items.length) return;
+      html += '<div class="g-section"><h3>'+SECTION_LABELS[s]+'</h3>';
+      items.forEach(function(item){
+        var key = 'buy|'+s+'|'+item.item.toLowerCase();
+        var isChecked = !!checked[key];
+        html += '<div class="g-item'+(isChecked?' checked':'')+'">' +
+          '<input type="checkbox" data-action="toggleGroceryItem" data-id="'+encodeURIComponent(key)+'"'+(isChecked?' checked':'')+'>' +
+          '<div><div class="g-name">'+escapeHtml(item.item)+' &mdash; '+escapeHtml(formatQty(item))+'</div>' +
+          renderMealsLine(item) +
+          (item.flag ? '<div class="g-flag">'+escapeHtml(flagLabel(item.flag))+(item.substitute? ' — '+escapeHtml(item.substitute) : ' — no solid substitute, decide in the shop')+'</div>'
+            : (item.substitute ? '<div class="g-meta">Note: '+escapeHtml(item.substitute)+'</div>' : '')) +
+          '</div></div>';
+      });
+      html += '</div>';
+    });
+    html += '</div>';
+
+    html += '<div class="card" style="margin-top:14px;"><h3 style="margin-bottom:10px;">Check the cupboard first</h3>';
+    if (!hasCupboard) html += '<div class="muted">Nothing marked as a pantry staple this week.</div>';
+    SECTIONS.forEach(function(s){
+      var items = bySection[s].filter(function(i){ return i.pantryStaple; });
+      if (!items.length) return;
+      html += '<div class="g-section"><h3>'+SECTION_LABELS[s]+'</h3>';
+      items.forEach(function(item){
+        var key = 'cupboard|'+s+'|'+item.item.toLowerCase();
+        var isChecked = !!checked[key];
+        html += '<div class="g-item'+(isChecked?' checked':'')+'">' +
+          '<input type="checkbox" data-action="toggleGroceryItem" data-id="'+encodeURIComponent(key)+'"'+(isChecked?' checked':'')+'>' +
+          '<div><div class="g-name">'+escapeHtml(item.item)+' &mdash; '+escapeHtml(formatQty(item))+'</div>' +
+          renderMealsLine(item) +
+          (item.flag ? '<div class="g-flag">'+escapeHtml(flagLabel(item.flag))+(item.substitute? ' — '+escapeHtml(item.substitute) : '')+'</div>'
+            : (item.substitute ? '<div class="g-meta">Note: '+escapeHtml(item.substitute)+'</div>' : '')) +
+          '</div></div>';
+      });
+      html += '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  // ---- Meals tab ----
+  function renderMealsTab(){
+    var f = ui.mealsFilter;
+    var list = meals.slice();
+    if (f.tier) list = list.filter(function(m){ return m.tier === f.tier; });
+    if (f.search) list = list.filter(function(m){ return (m.name+' '+m.base).toLowerCase().indexOf(f.search.toLowerCase()) !== -1; });
+    list.sort(function(a,b){
+      if (f.sort === 'effort') return (parseFloat(a.effortMinutes)||0) - (parseFloat(b.effortMinutes)||0);
+      if (f.sort === 'tier') return TIERS.indexOf(a.tier) - TIERS.indexOf(b.tier);
+      if (f.sort === 'lastCooked') return daysSince(a.lastCooked) - daysSince(b.lastCooked);
+      return (a.name||'').localeCompare(b.name||'');
+    });
+
+    var html = '<div class="section-head"><h2>Meals ('+meals.length+')</h2><button class="btn btn-primary btn-sm" data-action="addMeal">+ Add meal</button></div>';
+    html += '<div class="filters">' +
+      '<input type="search" id="meals-search-input" placeholder="Search name or base" value="'+escapeHtml(f.search)+'" data-action="filterSearch">' +
+      '<select data-action="filterTier"><option value="">All tiers</option>' + TIERS.map(function(t){ return '<option value="'+t+'"'+(f.tier===t?' selected':'')+'>'+TIER_LABELS[t]+'</option>'; }).join('') + '</select>' +
+      '<select data-action="filterSort"><option value="name"'+(f.sort==='name'?' selected':'')+'>Sort: name</option><option value="tier"'+(f.sort==='tier'?' selected':'')+'>Sort: tier</option><option value="effort"'+(f.sort==='effort'?' selected':'')+'>Sort: effort</option><option value="lastCooked"'+(f.sort==='lastCooked'?' selected':'')+'>Sort: last cooked</option></select>' +
+    '</div>';
+
+    if (!list.length){
+      html += '<div class="empty-state">'+(meals.length ? 'No meals match those filters.' : 'No meals yet — add one or import from a PDF.')+'</div>';
+      return html;
+    }
+    html += '<div class="meal-list">';
+    var currentWeekIds = getWeekIds();
+    var weekFull = currentWeekIds.indexOf(null) === -1;
+    list.forEach(function(m){
+      // One meal with an unexpected shape (a bad AI response, a hand-edited
+      // record) shouldn't hide every other meal in the list — isolate it here
+      // instead of letting it reach the render() top-level boundary.
+      try {
+        html += renderMealRow(m, currentWeekIds, weekFull);
+      } catch(err){
+        html += '<div class="meal-row-wrap"><div class="meal-row"><div class="m-info">' +
+          '<div class="m-name-btn">'+escapeHtml((m && m.name) || 'A meal')+'</div>' +
+          '<div class="g-flag">Couldn’t display this one (' + escapeHtml(err && err.message ? err.message : 'unknown error') + ')</div>' +
+          '</div><div class="row-actions">' +
+          (m && m.id ? '<button class="btn-link" data-action="askDelete" data-id="'+m.id+'">Delete</button>' : '') +
+          '</div></div></div>';
+      }
+    });
+    html += '</div>';
+    return html;
+  }
+
+  function renderMealRow(m, currentWeekIds, weekFull){
+    var expanded = ui.expandedMealId === m.id;
+    var inWeek = currentWeekIds.indexOf(m.id) !== -1;
+    var html = '<div class="meal-row-wrap"><div class="meal-row"><div class="m-info">' +
+      '<button type="button" class="m-name-btn" data-action="toggleMealView" data-id="'+m.id+'">'+escapeHtml(m.name)+'</button>' +
+      '<div class="m-meta">' +
+        // Ranking straight from the row: it's the edit you make most often, and
+        // it shouldn't require opening and saving the whole form. Deliberately a
+        // NATIVE select (no appearance:none) so it's obviously a control and
+        // opens the system picker on a phone.
+        '<span class="rank-label">Rank</span>' +
+        '<select class="tier-select" data-action="setMealTier" data-id="'+m.id+'" title="Ranking">' +
+          TIERS.map(function(t){ return '<option value="'+t+'"'+((m.tier||'unranked')===t?' selected':'')+'>'+TIER_LABELS[t]+'</option>'; }).join('') +
+        '</select>' +
+        (m.base ? '<span class="muted">'+escapeHtml(m.base)+'</span>' : '') +
+        (m.effort ? '<span class="muted mono">'+escapeHtml(m.effort)+'</span>' : '') +
+        (inWeek ? '<span class="chip in-week">In this week</span>' : '') +
+        (m.dietFlags && m.dietFlags.length ? m.dietFlags.map(function(){ return '<span class="chip flag">household rule</span>'; }).slice(0,1).join('') : '') +
+      '</div></div>' +
+      '<div class="row-actions">';
+    if (ui.confirmDeleteId === m.id){
+      html += '<span class="muted">Delete for good?</span> <button class="btn-link" data-action="confirmDelete" data-id="'+m.id+'">Yes, delete</button> <button class="btn-link" data-action="cancelDelete" data-id="'+m.id+'">Cancel</button>';
+    } else {
+      if (inWeek){
+        html += '<button class="btn btn-ghost btn-sm" data-action="removeMealFromWeekById" data-id="'+m.id+'">Remove from week</button>';
+      } else {
+        html += '<button class="btn btn-ghost btn-sm" data-action="addMealToWeek" data-id="'+m.id+'"'+(weekFull?' disabled title="This week already has 5 picks"':'')+'>'+(weekFull?'Week full':'+ Add to week')+'</button>';
+      }
+      html += '<button class="btn btn-ghost btn-sm" data-action="toggleMealView" data-id="'+m.id+'">'+(expanded?'Hide':'View')+'</button>' +
+        '<button class="btn btn-ghost btn-sm" data-action="editMeal" data-id="'+m.id+'">Edit</button>' +
+        '<button class="btn-link" data-action="askDelete" data-id="'+m.id+'">Delete</button>';
+    }
+    html += '</div></div>';
+    if (expanded) html += renderMealDetail(m);
+    html += '</div>';
+    return html;
+  }
+
+  function renderMealDetail(m){
+    var html = '<div class="meal-detail">';
+    html += '<div class="detail-block"><h4>Method</h4>' +
+      (m.method ? '<div class="detail-text">'+escapeHtml(m.method)+'</div>' : '<p class="muted">No method written down yet — edit this meal to add one.</p>') +
+      '</div>';
+    html += '<div class="detail-block"><h4>Ingredients</h4>';
+    if (m.ingredients && m.ingredients.length){
+      html += '<ul class="ing-list">' + m.ingredients.map(function(ing){
+        var qty = [ing.quantity, ing.unit].filter(Boolean).join(' ');
+        return '<li>' +
+          '<span>'+escapeHtml(ing.item||'')+(qty ? ' — '+escapeHtml(qty) : '')+'</span>' +
+          (ing.pantryStaple ? ' <span class="muted">(pantry staple)</span>' : '') +
+          (ing.flag ? '<div class="g-flag">'+escapeHtml(flagLabel(ing.flag))+(ing.substitute ? ' — '+escapeHtml(ing.substitute) : '')+'</div>'
+            : (ing.substitute ? '<div class="g-meta">Note: '+escapeHtml(ing.substitute)+'</div>' : '')) +
+        '</li>';
+      }).join('') + '</ul>';
+    } else {
+      html += '<p class="muted">No ingredients listed yet — edit this meal to add them.</p>';
+    }
+    html += '</div>';
+    if (m.notes){
+      html += '<div class="detail-block"><h4>Notes</h4><div class="detail-text muted">'+escapeHtml(m.notes)+'</div></div>';
+    }
+    if (m.sourceUrl){
+      html += '<div class="detail-block"><a href="'+escapeHtml(m.sourceUrl)+'" target="_blank" rel="noopener noreferrer" class="btn-link">Original source</a></div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  // ---- Import tab ----
+  function renderImportTab(){
+    var html = '<div class="section-head"><h2>Import a meal</h2></div>';
+
+    html += '<div class="card" style="margin-bottom:16px;">' +
+      '<label class="field-label" for="link-url-input">Add from a link</label>' +
+      '<p class="muted" style="margin-bottom:10px;">Paste a recipe link to save it to the Meals list right away, with the dish name taken from the link. The page can’t open the link itself, so the method and ingredients stay blank until you fill them in — or paste the recipe text below.</p>' +
+      '<div class="adjust-row">' +
+        '<input type="url" id="link-url-input" data-action="linkUrlInput" placeholder="https://…" value="'+escapeHtml(ui.linkUrl)+'">' +
+        '<button type="button" class="btn btn-forest btn-sm" data-action="addFromLink"'+(ui.linkSaving || !ui.linkUrl.trim() ? ' disabled' : '')+'>'+(ui.linkSaving?'Saving…':'Save link')+'</button>' +
+      '</div>' +
+      (!sampleUnavailable
+        ? '<p class="muted" style="margin-top:8px;font-size:0.78rem;">Tick to also have AI sketch a starting point from the dish name — it can’t see the page, so treat anything it writes as a guess to check against the real recipe before you cook it.</p>' +
+          '<label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;margin-top:4px;">' +
+            '<input type="checkbox" id="link-draft-toggle" data-action="linkDraftToggle"'+(ui.linkDraft?' checked':'')+'> Draft details with AI too' +
+          '</label>'
+        : '') +
+      (ui.linkError ? '<p class="g-flag" style="margin-top:10px;">'+escapeHtml(ui.linkError)+'</p>' : '') +
+    '</div>';
+
+    html += '<div class="card" style="margin-bottom:16px;">' +
+      '<label style="display:block;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-soft);margin-bottom:4px;">Upload recipe PDFs</label>' +
+      '<p class="muted" style="margin-bottom:10px;">Select one to review it before saving, or select several at once to import them straight in — each is read, AI-extracted, and saved to the Meals list with tier set to unranked. Check bulk imports over from the Meals tab afterward.</p>' +
+      '<input type="file" accept="application/pdf" multiple data-action="pdfFile">' +
+      (ui.importPdfReading ? '<p class="muted" style="margin-top:8px;">Reading the PDF&hellip;</p>' : '') +
+      (ui.bulkRunning ? '<p class="muted" style="margin-top:8px;">Importing '+ui.bulkDone+' of '+ui.bulkTotal+'&hellip;</p>' : '') +
+      (!ui.bulkRunning && ui.bulkTotal ? '<p class="muted" style="margin-top:8px;">Imported '+(ui.bulkTotal-ui.bulkFailed.length)+' of '+ui.bulkTotal+'.'+(ui.bulkFailed.length ? ' Couldn’t read: '+ui.bulkFailed.map(escapeHtml).join(', ')+' — try those one at a time.' : '')+'</p>' : '') +
+    '</div>';
+
+    html += '<div class="card">' +
+      '<p class="muted" style="margin-bottom:12px;">Or paste recipe text directly — it lands in the box below, then AI pulls out the name, base, effort, method and ingredients into a form you can check before saving.</p>' +
+      '<div class="field"><label>Recipe text</label><textarea id="import-text-input" data-action="importTextInput" placeholder="Paste the recipe here, or select a single PDF above and it will fill in" rows="8">'+escapeHtml(ui.importRawText)+'</textarea></div>' +
+      '<div class="field"><label>Source URL (optional, kept for reference only)</label><input type="url" id="import-url-input" value="'+escapeHtml(ui.importSourceUrl)+'" data-action="importUrlInput" placeholder="https://…"></div>';
+
+    if (sampleUnavailable){
+      html += '<p class="muted">AI extraction isn’t available in this view — write the details in by hand below.</p>' +
+        '<button class="btn btn-primary" data-action="manualFromImport">Fill in the fields by hand</button>';
+    } else {
+      html += '<button class="btn btn-primary" data-action="extractImport"'+(ui.importExtracting || !ui.importRawText.trim() ? ' disabled' : '')+'>'+(ui.importExtracting ? 'Reading recipe…' : 'Extract details with AI')+'</button> ' +
+        '<button class="btn btn-ghost" data-action="manualFromImport">Skip, fill in by hand</button>';
+    }
+    if (ui.importError) html += '<p class="g-flag" style="margin-top:10px;">'+escapeHtml(ui.importError)+'</p>';
+    html += '</div>';
+    return html;
+  }
+
+  // ---- Meal form (add / edit / review-import) ----
+  function renderAdjustBlock(){
+    if (sampleUnavailable) return '';
+    var html = '<fieldset class="adjust-fieldset"><legend>Adjust with AI</legend>' +
+      '<p class="muted" style="margin-bottom:8px;">Describe a change and it’s applied to the base, method, ingredients and notes below — review and edit before saving.</p>' +
+      '<div class="adjust-row">' +
+        '<input type="text" id="adjust-instruction" placeholder="e.g. swap the chicken for tofu, we used way less garlic, double the batch" value="'+escapeHtml(ui.adjustInstruction)+'">' +
+        '<button type="button" class="btn btn-forest btn-sm" data-action="adjustWithAi"'+(ui.adjusting?' disabled':'')+'>'+(ui.adjusting?'Applying…':'Apply')+'</button>' +
+      '</div>';
+    if (ui.adjustError) html += '<p class="g-flag" style="margin-top:8px;">'+escapeHtml(ui.adjustError)+'</p>';
+    if (ui.adjustApplied) html += '<p class="muted" style="margin-top:8px;">Applied — check the fields below, then save.</p>';
+    html += '</fieldset>';
+    return html;
+  }
+
+  function renderMealFormOverlay(){
+    var d = ui.formDraft;
+    var isEdit = !!d.id;
+    var html = '<div class="overlay" id="form-overlay"><div class="sheet">' +
+      '<div class="sheet-head"><h3>'+(isEdit ? 'Edit meal' : 'New meal')+'</h3><button class="close-x" data-action="closeForm">&times;</button></div>' +
+      // Submit actions use their OWN attribute. With data-action, the delegated
+      // click listener's closest('[data-action]') walked up from any plain field
+      // inside the form — the notes box, the method box — matched the form
+      // itself, and fired save-and-close on a mere click into a text field.
+      '<form data-submit-action="saveMealForm">' +
+      '<div class="field"><label>Name</label><input type="text" id="f-name" value="'+escapeHtml(d.name)+'" required></div>' +
+      '<div class="grid-2">' +
+        '<div class="field"><label>Base / main protein</label><input type="text" id="f-base" value="'+escapeHtml(d.base)+'"></div>' +
+        '<div class="field"><label>Tier</label><select id="f-tier">' + TIERS.map(function(t){ return '<option value="'+t+'"'+(d.tier===t?' selected':'')+'>'+TIER_LABELS[t]+'</option>'; }).join('') + '</select></div>' +
+      '</div>' +
+      '<div class="grid-2">' +
+        '<div class="field"><label>Effort (human, e.g. "Low, 30 min, one pan")</label><input type="text" id="f-effort" value="'+escapeHtml(d.effort)+'"></div>' +
+        '<div class="field"><label>Effort minutes (for sorting)</label><input type="number" id="f-effortMinutes" value="'+escapeHtml(d.effortMinutes)+'" min="0"></div>' +
+      '</div>' +
+      '<div class="grid-2">' +
+        '<div class="field"><label>Servings</label><input type="number" id="f-servings" value="'+escapeHtml(d.servings)+'" min="1"></div>' +
+        '<div class="field"><label>Last cooked</label><input type="date" id="f-lastCooked" value="'+escapeHtml(d.lastCooked)+'"></div>' +
+      '</div>' +
+      '<div class="grid-2">' +
+        '<div class="field"><label>Times cooked</label><input type="number" id="f-timesCooked" value="'+escapeHtml(d.timesCooked)+'" min="0"></div>' +
+        '<div class="field"><label>Source URL (optional)</label><input type="url" id="f-sourceUrl" value="'+escapeHtml(d.sourceUrl)+'"></div>' +
+      '</div>' +
+      renderAdjustBlock() +
+      '<div class="field"><label>Method</label><textarea id="f-method" rows="6">'+escapeHtml(d.method)+'</textarea></div>' +
+      '<div class="field"><label>Notes (substitutions, storage, what changed last time)</label><textarea id="f-notes" rows="3">'+escapeHtml(d.notes)+'</textarea></div>' +
+
+      '<fieldset><legend>Household rule flags</legend>' + renderDietRows(d.dietFlags) +
+        '<button type="button" class="btn-link" data-action="addDietRow">+ add a rule flag</button></fieldset>' +
+
+      '<fieldset><legend>Ingredients</legend>' + renderIngredientRows(d.ingredients) +
+        '<button type="button" class="btn-link" data-action="addIngredientRow">+ add ingredient</button></fieldset>' +
+
+      (ui.formError ? '<div class="warnbox warn" style="margin-top:12px;">'+escapeHtml(ui.formError)+'</div>' : '') +
+      '<div class="form-actions">' +
+        '<div>'+(isEdit ? '<button type="button" class="btn btn-ghost" data-action="markCooked">Mark cooked today</button>' : '')+'</div>' +
+        '<div class="row-actions"><button type="button" class="btn btn-ghost" data-action="closeForm">Cancel</button>' +
+        '<button type="submit" class="btn btn-primary"'+(ui.formSaving?' disabled':'')+'>'+(ui.formSaving?'Saving…':'Save meal')+'</button></div>' +
+      '</div>' +
+      '</form></div></div>';
+    return html;
+  }
+  function renderDietRows(rows){
+    rows = rows || [];
+    if (!rows.length) return '<p class="muted" style="margin-bottom:8px;">No flags — this dish is fine as written.</p>';
+    return rows.map(function(r, i){
+      return '<div class="diet-row" data-row-index="'+i+'">' +
+        '<input type="text" data-field="rule" placeholder="Rule broken, e.g. not gluten-free" value="'+escapeHtml(r.rule)+'">' +
+        '<input type="text" data-field="substitute" placeholder="Workable substitute" value="'+escapeHtml(r.substitute)+'">' +
+        '<button type="button" class="btn-link" data-action="removeDietRow" data-id="'+i+'">remove</button>' +
+      '</div>';
+    }).join('');
+  }
+  function renderIngredientRows(rows){
+    rows = rows || [];
+    if (!rows.length) return '<p class="muted" style="margin-bottom:8px;">No ingredients yet.</p>';
+    return rows.map(function(r, i){
+      r = r || {};
+      return '<div class="sub-row" data-row-index="'+i+'">' +
+        '<input type="text" data-field="item" placeholder="Item" value="'+escapeHtml(r.item)+'" data-action-blur="autoFlagRow">' +
+        '<input type="text" data-field="quantity" placeholder="Qty" value="'+escapeHtml(r.quantity)+'">' +
+        '<input type="text" data-field="unit" placeholder="Unit" value="'+escapeHtml(r.unit)+'">' +
+        '<select data-field="section">' + SECTIONS.map(function(s){ return '<option value="'+s+'"'+(r.section===s?' selected':'')+'>'+SECTION_LABELS[s]+'</option>'; }).join('') + '</select>' +
+        '<label style="display:flex;align-items:center;gap:4px;font-size:0.72rem;" title="Check the cupboard first, don’t add to buy list"><input type="checkbox" data-field="pantryStaple"'+(r.pantryStaple?' checked':'')+'> staple</label>' +
+        '<select data-field="flag"><option value="">No flag</option>' + flagOptions(r.flag) + '</select>' +
+        '<button type="button" class="btn-link" data-action="removeIngredientRow" data-id="'+i+'">remove</button>' +
+        (r.flag ? '<input type="text" data-field="substitute" placeholder="Substitute" value="'+escapeHtml(r.substitute)+'" style="grid-column:1 / -1;">' : '') +
+      '</div>';
+    }).join('');
+  }
+
+  // ---- Week picker overlay ----
+  function renderWeekPickerOverlay(){
+    var used = (weekDoc && weekDoc.mealIds) || [];
+    var list = meals.filter(function(m){
+      if (ui.weekPickerFilterTier && m.tier !== ui.weekPickerFilterTier) return false;
+      if (ui.weekPickerSearch && (m.name+' '+m.base).toLowerCase().indexOf(ui.weekPickerSearch.toLowerCase())===-1) return false;
+      return true;
+    });
+    var html = '<div class="overlay" id="week-picker-overlay"><div class="sheet">' +
+      '<div class="sheet-head"><h3>Pick a meal</h3><button class="close-x" data-action="closeWeekPicker">&times;</button></div>' +
+      '<div class="filters"><input type="search" id="week-picker-search-input" placeholder="Search" value="'+escapeHtml(ui.weekPickerSearch)+'" data-action="weekPickerSearch">' +
+      '<select data-action="weekPickerTier"><option value="">All tiers</option>' + TIERS.map(function(t){ return '<option value="'+t+'"'+(ui.weekPickerFilterTier===t?' selected':'')+'>'+TIER_LABELS[t]+'</option>'; }).join('') + '</select></div>';
+    if (!list.length) html += '<p class="muted">No meals match.</p>';
+    list.forEach(function(m){
+      try {
+        var alreadyIn = used.indexOf(m.id) !== -1;
+        var expanded = ui.expandedMealId === m.id;
+        html += '<div class="pick-row"><div class="pick-main">' +
+          '<button class="pick-option" data-action="chooseWeekMeal" data-id="'+m.id+'"><span><strong>'+escapeHtml(m.name)+'</strong> <span class="muted">'+escapeHtml(m.base||'')+'</span></span>' +
+          '<span class="chip tier-'+(m.tier||'unranked')+'">'+TIER_LABELS[m.tier||'unranked']+(alreadyIn?' &middot; in this week':'')+'</span></button>' +
+          '<button type="button" class="btn-link pick-view-btn" data-action="toggleMealView" data-id="'+m.id+'">'+(expanded?'Hide':'View recipe')+'</button>' +
+          '</div>' +
+          (expanded ? renderMealDetail(m) : '') +
+        '</div>';
+      } catch(err){ /* skip a malformed meal rather than break the whole picker */ }
+    });
+    html += '</div></div>';
+    return html;
+  }
+
+  // ---------- actions ----------
+  function syncFormDraftFromDom(){
+    var d = ui.formDraft; if (!d) return;
+    // These two run on every render while the form is open; if either were ever
+    // missing, the assignments below would throw and break the whole form.
+    if (!Array.isArray(d.dietFlags)) d.dietFlags = [];
+    if (!Array.isArray(d.ingredients)) d.ingredients = [];
+    var g = function(id){ var el = document.getElementById(id); return el ? el.value : ''; };
+    d.name = g('f-name'); d.base = g('f-base'); d.tier = g('f-tier'); d.effort = g('f-effort');
+    d.effortMinutes = g('f-effortMinutes'); d.servings = g('f-servings') || 4;
+    d.lastCooked = g('f-lastCooked'); d.timesCooked = g('f-timesCooked') || 0; d.sourceUrl = g('f-sourceUrl');
+    d.method = g('f-method'); d.notes = g('f-notes');
+    var adjEl = document.getElementById('adjust-instruction');
+    if (adjEl) ui.adjustInstruction = adjEl.value;
+    document.querySelectorAll('.diet-row').forEach(function(row){
+      var i = parseInt(row.getAttribute('data-row-index'),10);
+      var rule = row.querySelector('[data-field="rule"]'), sub = row.querySelector('[data-field="substitute"]');
+      d.dietFlags[i] = { rule: rule?rule.value:'', substitute: sub?sub.value:'' };
+    });
+    document.querySelectorAll('.sub-row').forEach(function(row){
+      var i = parseInt(row.getAttribute('data-row-index'),10);
+      var get = function(f){ return row.querySelector('[data-field="'+f+'"]'); };
+      var itemEl=get('item'), qtyEl=get('quantity'), unitEl=get('unit'), secEl=get('section'), pantryEl=get('pantryStaple'), flagEl=get('flag'), subEl=get('substitute');
+      d.ingredients[i] = {
+        item: itemEl?itemEl.value:'', quantity: qtyEl?qtyEl.value:'', unit: unitEl?unitEl.value:'',
+        section: secEl?secEl.value:'other', pantryStaple: pantryEl?pantryEl.checked:false,
+        flag: flagEl && flagEl.value ? flagEl.value : null, substitute: subEl?subEl.value:''
+      };
+    });
+  }
+
+  var actions = {
+    setTab: function(el, id){ currentTab = id; ui.weekPickerOpen=false; render(); },
+    dismissActionError: function(){ ui.actionError = null; render(); },
+    recoverFromError: function(){
+      ui.formOpen = false; ui.formDraft = null; ui.weekPickerOpen = false; ui.expandedMealId = null;
+      ui.confirmDeleteId = null; ui.confirmNewWeek = false; ui.confirmAutoPick = false;
+      ui.actionError = null;
+      currentTab = 'week';
+      render();
+    },
+
+    addMeal: function(){ resetAdjustState(); ui.formDraft = blankMeal(); ui.formOpen = true; render(); },
+    editMeal: function(el, id){ var m = meals.find(function(x){ return x.id===id; }); if (!m) return; resetAdjustState(); ui.formDraft = JSON.parse(JSON.stringify(m)); ui.formOpen = true; render(); },
+    toggleMealView: function(el, id){ ui.expandedMealId = (ui.expandedMealId === id ? null : id); render(); },
+    setMealTier: function(el, id){
+      var m = meals.find(function(x){ return x.id===id; });
+      if (!m) return;
+      var updated = JSON.parse(JSON.stringify(m));
+      updated.tier = el.value;
+      return saveMeal(updated).then(function(){
+        ui.toast = 'Ranked ' + (TIER_LABELS[el.value] || el.value).toLowerCase();
+        render();
+        setTimeout(function(){ ui.toast = null; render(); }, 1500);
+      }).catch(reportActionError);
+    },
+    closeForm: function(){ resetAdjustState(); ui.formOpen = false; ui.formDraft = null; render(); },
+    askDelete: function(el, id){ ui.confirmDeleteId = id; render(); },
+    cancelDelete: function(){ ui.confirmDeleteId = null; render(); },
+    confirmDelete: function(el, id){
+      ui.confirmDeleteId = null;
+      render();
+      return deleteMeal(id).catch(reportActionError);
+    },
+    markCooked: function(){
+      syncFormDraftFromDom();
+      ui.formDraft.lastCooked = todayIso();
+      ui.formDraft.timesCooked = (parseInt(ui.formDraft.timesCooked,10)||0) + 1;
+      render();
+    },
+
+    addDietRow: function(){ syncFormDraftFromDom(); ui.formDraft.dietFlags.push(newDietFlag()); render(); },
+    removeDietRow: function(el, id){ syncFormDraftFromDom(); ui.formDraft.dietFlags.splice(parseInt(id,10),1); render(); },
+    addIngredientRow: function(){ syncFormDraftFromDom(); ui.formDraft.ingredients.push(newIngredient()); render(); },
+    removeIngredientRow: function(el, id){ syncFormDraftFromDom(); ui.formDraft.ingredients.splice(parseInt(id,10),1); render(); },
+
+    filterSearch: function(el){ ui.mealsFilter.search = el.value; render(); },
+    filterTier: function(el){ ui.mealsFilter.tier = el.value; render(); },
+    filterSort: function(el){ ui.mealsFilter.sort = el.value; render(); },
+
+    startWeek: function(){ updateWeek({ weekStart: mondayIso(), mealIds: [null,null,null,null,null], checkedItems: {}, started: true }); },
+    askNewWeek: function(){ ui.confirmNewWeek = true; render(); },
+    cancelNewWeek: function(){ ui.confirmNewWeek = false; render(); },
+    confirmNewWeek: function(){
+      ui.confirmNewWeek = false;
+      updateWeek({ weekStart: mondayIso(), mealIds: [null,null,null,null,null], checkedItems: {}, started: true });
+    },
+    autoPickWeek: function(){
+      var hasExisting = getWeekIds().some(function(x){ return x; });
+      if (hasExisting && !ui.confirmAutoPick){ ui.confirmAutoPick = true; render(); return; }
+      ui.confirmAutoPick = false;
+      if (!meals.length){ render(); return; }
+      var picks = weightedPickWithoutReplacement(meals, Math.min(5, meals.length));
+      var ids = picks.map(function(m){ return m.id; });
+      while (ids.length < 5) ids.push(null);
+      updateWeek({ mealIds: ids, weekStart: (weekDoc && weekDoc.weekStart) || mondayIso(), started: true });
+    },
+    cancelAutoPick: function(){ ui.confirmAutoPick = false; render(); },
+    openWeekPicker: function(el, id){ ui.weekPickerOpen = true; ui.weekPickerSlot = parseInt(id,10); ui.weekPickerSearch=''; ui.weekPickerFilterTier=''; render(); },
+    closeWeekPicker: function(){ ui.weekPickerOpen = false; render(); },
+    weekPickerSearch: function(el){ ui.weekPickerSearch = el.value; render(); },
+    weekPickerTier: function(el){ ui.weekPickerFilterTier = el.value; render(); },
+    chooseWeekMeal: function(el, id){
+      var ids = getWeekIds();
+      ids[ui.weekPickerSlot] = id;
+      ui.weekPickerOpen = false;
+      updateWeek({ mealIds: ids, weekStart: (weekDoc && weekDoc.weekStart) || mondayIso(), started: true });
+    },
+    removeFromWeek: function(el, id){
+      var ids = getWeekIds();
+      ids[parseInt(id,10)] = null;
+      updateWeek({ mealIds: ids });
+    },
+    addMealToWeek: function(el, id){
+      var ids = getWeekIds();
+      var slot = ids.indexOf(null);
+      if (slot === -1) return;
+      ids[slot] = id;
+      updateWeek({ mealIds: ids, weekStart: (weekDoc && weekDoc.weekStart) || mondayIso(), started: true });
+      ui.toast = 'Added to this week';
+      render();
+      setTimeout(function(){ ui.toast = null; render(); }, 1800);
+    },
+    removeMealFromWeekById: function(el, id){
+      var ids = getWeekIds();
+      var idx = ids.indexOf(id);
+      if (idx !== -1){ ids[idx] = null; updateWeek({ mealIds: ids }); }
+    },
+
+    toggleGroceryItem: function(el, id){
+      var key = decodeURIComponent(id);
+      var checked = Object.assign({}, (weekDoc && weekDoc.checkedItems) || {});
+      checked[key] = !checked[key];
+      updateWeek({ checkedItems: checked });
+    },
+    copyGrocery: function(el, id){
+      var picked = selectedMeals();
+      var bySection = buildGroceryList(picked);
+      var text = groceryCopyText(bySection, id === 'buy');
+      copyText(text || 'Nothing here yet.', id === 'buy' ? 'Buy list' : 'Cupboard-check list');
+    },
+
+    importTextInput: function(el){ ui.importRawText = el.value; },
+    importUrlInput: function(el){ ui.importSourceUrl = el.value; },
+    linkUrlInput: function(el){ ui.linkUrl = el.value; },
+    linkDraftToggle: function(el){ ui.linkDraft = !!el.checked; },
+    addFromLink: async function(){
+      var url = (ui.linkUrl || '').trim();
+      if (!url || ui.linkSaving) return;
+      var name = deriveNameFromUrl(url);
+      ui.linkSaving = true; ui.linkError = null; render();
+      try {
+        var meal = blankMeal();
+        meal.name = name || 'Untitled recipe';
+        meal.sourceUrl = url;
+        meal.notes = 'Saved from a link. Method and ingredients still to fill in.';
+
+        if (ui.linkDraft && sampleFn && name){
+          try {
+            var draft = await sampleFn.json(buildLinkDraftPrompt(name, url));
+            var drafted = draftToMeal(draft, url);
+            if (drafted.name) meal.name = drafted.name;
+            meal.base = drafted.base; meal.effort = drafted.effort;
+            meal.effortMinutes = drafted.effortMinutes; meal.servings = drafted.servings;
+            meal.method = drafted.method;
+            meal.dietFlags = drafted.dietFlags; meal.ingredients = drafted.ingredients;
+            meal.notes = 'DRAFTED FROM THE LINK’S TITLE ONLY — the page was never read. Check every ingredient against the real recipe before cooking it.'
+              + (drafted.notes ? '\n\n' + drafted.notes : '');
+          } catch(e){
+            // A failed draft shouldn't cost them the saved link.
+            meal.notes = 'Saved from a link. AI draft didn’t come through (' + ((e && (e.message||e.code)) || 'unknown') + ') — fill in the details by hand.';
+          }
+        }
+
+        await saveMeal(meal);
+        ui.linkSaving = false; ui.linkUrl = '';
+        ui.toast = 'Added “' + meal.name + '” to Meals';
+        render();
+        setTimeout(function(){ ui.toast = null; render(); }, 2200);
+      } catch(err){
+        ui.linkSaving = false;
+        ui.linkError = 'Couldn’t save that link: ' + ((err && (err.message||err.code)) || 'unknown error');
+        render();
+      }
+    },
+    pdfFile: async function(el){
+      var files = el.files ? Array.prototype.slice.call(el.files) : [];
+      if (!files.length) return;
+
+      if (files.length === 1){
+        ui.importPdfReading = true; ui.importError = null; ui.bulkTotal = 0; render();
+        try { ui.importRawText = await extractPdfText(files[0]); }
+        catch(e){ ui.importError = 'Couldn’t read that PDF automatically — try opening it and pasting the recipe text instead.'; }
+        ui.importPdfReading = false; render();
+        return;
+      }
+
+      // Several files at once: import each straight into the list rather than
+      // reviewing one at a time — tier defaults to unranked regardless, so
+      // there's nothing that needs a decision before saving. Review/edit
+      // afterward from the Meals tab.
+      if (!sampleFn){
+        ui.importError = 'AI extraction isn’t available in this view, so bulk import can’t run automatically — import one PDF at a time and fill in fields by hand, or paste text instead.';
+        render();
+        return;
+      }
+      ui.bulkRunning = true; ui.bulkTotal = files.length; ui.bulkDone = 0; ui.bulkFailed = []; ui.importError = null;
+      render();
+      for (var i=0;i<files.length;i++){
+        try {
+          var text = await extractPdfText(files[i]);
+          var draft = await sampleFn.json(buildExtractionPrompt(text, ''));
+          saveMeal(draftToMeal(draft, ''));
+        } catch(e){
+          ui.bulkFailed.push(files[i].name);
+        }
+        ui.bulkDone = i + 1;
+        render();
+      }
+      ui.bulkRunning = false;
+      render();
+    },
+    extractImport: async function(){
+      if (!sampleFn){ sampleUnavailable = true; render(); return; }
+      ui.importExtracting = true; ui.importError = null; render();
+      try {
+        var draft = await sampleFn.json(buildExtractionPrompt(ui.importRawText, ui.importSourceUrl));
+        ui.importExtracting = false;
+        resetAdjustState();
+        ui.formDraft = draftToMeal(draft, ui.importSourceUrl);
+        ui.formOpen = true;
+        render();
+      } catch(e){
+        ui.importExtracting = false;
+        ui.importError = sampleErrorMessage(e);
+        render();
+      }
+    },
+
+    adjustWithAi: async function(){
+      if (!sampleFn || !ui.formDraft) return;
+      var input = document.getElementById('adjust-instruction');
+      var instruction = input ? input.value.trim() : '';
+      if (!instruction) return;
+      syncFormDraftFromDom();
+      ui.adjustInstruction = instruction;
+      ui.adjusting = true; ui.adjustError = null; ui.adjustApplied = false; render();
+      try {
+        var result = await sampleFn.json(buildAdjustPrompt(ui.formDraft, instruction));
+        if (result.base) ui.formDraft.base = result.base;
+        if (result.method) ui.formDraft.method = result.method;
+        if (result.notes != null) ui.formDraft.notes = result.notes;
+        if (Array.isArray(result.dietFlags)) ui.formDraft.dietFlags = mapDietFlags(result.dietFlags);
+        if (Array.isArray(result.ingredients)) ui.formDraft.ingredients = mapIngredients(result.ingredients);
+        ui.adjusting = false;
+        ui.adjustInstruction = '';
+        ui.adjustApplied = true;
+        render();
+      } catch(e){
+        ui.adjusting = false;
+        ui.adjustError = sampleErrorMessage(e);
+        render();
+      }
+    },
+    manualFromImport: function(){
+      resetAdjustState();
+      var m = blankMeal();
+      m.method = ui.importRawText; m.sourceUrl = ui.importSourceUrl;
+      ui.formDraft = m; ui.formOpen = true; render();
+    },
+
+    saveMealForm: async function(el, id, extra, e){
+      e.preventDefault();
+      if (ui.formSaving) return;
+      syncFormDraftFromDom();
+      var d = ui.formDraft;
+      if (!d){ return; }
+      // Used to `return` silently here, which looks exactly like a dead Save button.
+      if (!d.name || !d.name.trim()){
+        ui.formError = 'Give the meal a name before saving.';
+        render();
+        return;
+      }
+      (d.ingredients || []).forEach(function(ing){
+        if (!ing.flag){ var auto = autoFlagIngredient(ing.item); if (auto){ ing.flag = auto.flag; ing.substitute = ing.substitute || auto.substitute; } }
+      });
+      ui.formSaving = true; ui.formError = null; render();
+      try {
+        await saveMeal(d);
+        ui.formSaving = false;
+        resetAdjustState();
+        ui.formOpen = false; ui.formDraft = null;
+        ui.importRawText = ''; ui.importSourceUrl = ''; ui.importError = null;
+        ui.toast = 'Saved';
+        render();
+        setTimeout(function(){ ui.toast = null; render(); }, 1800);
+      } catch(err){
+        // Keep the form open with everything still in it — losing the edit AND
+        // the explanation is the worst possible outcome here.
+        ui.formSaving = false;
+        ui.formError = 'Couldn’t save: ' + (err && (err.message || err.code) ? (err.message || err.code) : 'unknown error') + '. Your changes are still here — try again.';
+        render();
+      }
+    }
+  };
+  var blurActions = {
+    autoFlagRow: function(el){
+      var row = el.closest('.sub-row'); if (!row) return;
+      var flagEl = row.querySelector('[data-field="flag"]');
+      if (flagEl && flagEl.value) return;
+      var auto = autoFlagIngredient(el.value);
+      if (auto && ui.formDraft){
+        var i = parseInt(row.getAttribute('data-row-index'),10);
+        syncFormDraftFromDom();
+        var target = ui.formDraft.ingredients && ui.formDraft.ingredients[i];
+        if (!target) return;
+        target.flag = auto.flag;
+        target.substitute = target.substitute || auto.substitute;
+        render();
+      }
+    }
+  };
+
+  // Actions driven by change/input events must NOT also fire on click (the delegated
+  // click listener below would otherwise re-run them a second time on the same
+  // interaction — double-toggling a checkbox back to its old value, or tearing a
+  // text input out of the DOM mid-focus when its container re-renders).
+  var CHANGE_ACTIONS = { pdfFile:1, filterTier:1, filterSort:1, weekPickerTier:1, toggleGroceryItem:1, setMealTier:1, linkDraftToggle:1 };
+  var LIVE_INPUT_ACTIONS = { importTextInput:1, importUrlInput:1, filterSearch:1, weekPickerSearch:1, linkUrlInput:1 };
+
+  // Every handler runs through here. A throw inside one used to leave the action
+  // half-done with no re-render — the app just stopped responding, with the real
+  // error only visible in a console nobody has open on a phone. Now it surfaces.
+  function runAction(fn, el, id, e){
+    try {
+      var result = fn(el, id, null, e);
+      if (result && typeof result.catch === 'function') result.catch(reportActionError);
+    } catch(err){
+      reportActionError(err);
+    }
+  }
+  function reportActionError(err){
+    ui.actionError = (err && err.message) ? err.message : String(err);
+    try { render(); } catch(e){}
+  }
+
+  document.getElementById('app').addEventListener('click', function(e){
+    var el = e.target.closest('[data-action]');
+    if (!el) return;
+    // closest() walks upward, so a click on a plain child (a text field, a label,
+    // empty space) can resolve to a CONTAINER that carries an action. Only ever
+    // treat a real control as clicked.
+    var tag = el.tagName;
+    if (tag !== 'BUTTON' && tag !== 'A') return;
+    var action = el.getAttribute('data-action');
+    if (!actions[action] || CHANGE_ACTIONS[action] || LIVE_INPUT_ACTIONS[action]) return;
+    runAction(actions[action], el, el.getAttribute('data-id'), e);
+  });
+  document.getElementById('app').addEventListener('change', function(e){
+    var el = e.target.closest('[data-action]');
+    if (!el) return;
+    var action = el.getAttribute('data-action');
+    if (CHANGE_ACTIONS[action] && actions[action]) runAction(actions[action], el, el.getAttribute('data-id'), e);
+  });
+  document.getElementById('app').addEventListener('input', function(e){
+    var el = e.target.closest('[data-action]');
+    if (!el) return;
+    var action = el.getAttribute('data-action');
+    if (LIVE_INPUT_ACTIONS[action] && actions[action]) runAction(actions[action], el, el.getAttribute('data-id'), e);
+  });
+  document.getElementById('app').addEventListener('blur', function(e){
+    var el = e.target.closest('[data-action-blur]');
+    if (!el) return;
+    var action = el.getAttribute('data-action-blur');
+    if (blurActions[action]) runAction(blurActions[action], el, null, e);
+  }, true);
+  document.getElementById('app').addEventListener('submit', function(e){
+    var el = e.target.closest('[data-submit-action]');
+    if (!el) return;
+    // Always stop the native submit first. If the handler below were missing or
+    // threw before its own preventDefault, the browser would navigate the frame
+    // away from the app — indistinguishable from a crash.
+    e.preventDefault();
+    var action = el.getAttribute('data-submit-action');
+    if (actions[action]) runAction(actions[action], el, null, e);
+  });
+  // Backdrop dismissal requires the press AND the release to both land on the
+  // backdrop itself. Closing on mousedown alone meant a drag that started inside
+  // the sheet — or a stray touch during a re-render — could throw away an edit
+  // in progress.
+  var backdropPressTarget = null;
+  document.getElementById('app').addEventListener('mousedown', function(e){
+    backdropPressTarget = (e.target && e.target.id) ? e.target.id : null;
+  });
+  document.getElementById('app').addEventListener('click', function(e){
+    var id = e.target && e.target.id;
+    if (!id || id !== backdropPressTarget) return;
+    if (id === 'form-overlay') runAction(actions.closeForm, e.target, null, e);
+    if (id === 'week-picker-overlay') runAction(actions.closeWeekPicker, e.target, null, e);
+  });
+
+  render();
+  initStore();
+})();
+</script>
