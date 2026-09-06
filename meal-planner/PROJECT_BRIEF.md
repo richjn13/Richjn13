@@ -100,8 +100,7 @@ Generated from the five picks, in the same session.
 These are hard constraints on the data model, not preferences to be toggled per meal.
 
 - Gluten free is a hard rule. The app should flag the easy misses automatically — soy sauce, stock, oats, pasta, gnocchi, sauces, spice blends, tortillas, breadcrumbs.
-- No eggs in anything cooked at home, including hidden ones such as binders, washes, mayonnaise and fresh pasta.
-- Mostly vegan. Meat and dairy are allowed but should be a deliberate choice, so the app defaults to the plant based option when a dish works either way.
+- Not vegan — meat, fish and non-cow dairy are fine. Instead, flag these specific restrictions wherever they appear, with a substitute only where a genuinely safe one exists: egg white (whole eggs, mayonnaise and meringue count — the white is always present), flaxseed or linseed, cashew, pistachio, hazelnut, mushroom, gliadin, orange, cuttlefish, brewer's yeast, lobster, and cow's milk (including cheese, yogurt, butter and cream).
 - Two adults. Each meal cooks four servings, two for dinner and two carried into lunch.
 - Equipment on hand includes a Ninja Creami, a sous vide setup and a silicone cupcake pan.
 

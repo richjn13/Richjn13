@@ -152,8 +152,12 @@
   .sheet-head{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; }
   .close-x{ background:none; border:none; color:var(--ink-soft); font-size:1.3rem; line-height:1; cursor:pointer; }
   .close-x:hover{ color:var(--accent); }
-  .pick-option{ width:100%; display:flex; justify-content:space-between; align-items:center; gap:10px; background:transparent; border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:7px; cursor:pointer; text-align:left; color:var(--ink); }
+  .pick-option{ width:100%; display:flex; justify-content:space-between; align-items:center; gap:10px; background:transparent; border:1px solid var(--line); border-radius:10px; padding:10px 12px; cursor:pointer; text-align:left; color:var(--ink); }
   .pick-option:hover{ border-color:var(--accent); background:rgba(194,74,52,0.06); }
+  .pick-row{ margin-bottom:8px; }
+  .pick-main{ display:flex; align-items:center; gap:6px; }
+  .pick-main .pick-option{ flex:1; }
+  .pick-view-btn{ white-space:nowrap; flex:none; }
 
   /* week */
   .slots{ display:flex; flex-direction:column; gap:10px; margin-bottom:16px; }
@@ -199,50 +203,67 @@
   var SECTION_LABELS = { 'produce':'Produce', 'protein':'Protein', 'dairy-and-chilled':'Dairy & chilled', 'tins-and-dry-goods':'Tins & dry goods', 'freezer':'Freezer', 'other':'Everything else' };
   var TIERS = ['often','sometimes','rarely','unranked'];
   var TIER_LABELS = { often:'Often', sometimes:'Sometimes', rarely:'Rarely', unranked:'Unranked' };
-  var FLAG_LABELS = { 'not-gluten-free':'Not gluten-free', 'not-vegan':'Not vegan', 'contains-egg':'Contains egg' };
+  // Household dietary restrictions. Gluten-free is the one structural rule tied
+  // to specific culinary substitutes (a whole category of easy-miss ingredients
+  // with well-established swaps); everything else below is a specific allergen
+  // to avoid, each checked against a short list of keywords likely to appear in
+  // an ingredient name. Order matters: more specific/named items are checked
+  // before broad categories (cow-milk, gluten) so e.g. "cashew milk" flags as
+  // cashew, not cow-milk, and "fresh pasta" flags for egg white before the
+  // plain "pasta" gluten check gets to it.
+  var FLAG_LABELS = {
+    'not-gluten-free': 'Not gluten-free',
+    'egg-white': 'Contains egg white',
+    'flaxseed': 'Contains flaxseed/linseed',
+    'cashew': 'Contains cashew',
+    'pistachio': 'Contains pistachio',
+    'hazelnut': 'Contains hazelnut',
+    'mushroom': 'Contains mushroom',
+    'gliadin': 'Contains gliadin',
+    'orange': 'Contains orange',
+    'cuttlefish': 'Contains cuttlefish',
+    'brewers-yeast': 'Contains brewer’s yeast',
+    'lobster': 'Contains lobster',
+    'cow-milk': 'Contains cow’s milk'
+  };
 
-  var GLUTEN_HINTS = [
-    ['soy sauce', 'use tamari'],
-    ['stock', 'check the label or use a certified gluten-free stock'],
-    ['oats', 'use certified gluten-free oats'],
-    ['gnocchi', 'use gluten-free gnocchi'],
-    ['pasta', 'use gluten-free pasta'],
-    ['tortilla', 'use corn or gluten-free tortillas'],
-    ['breadcrumbs', 'use gluten-free breadcrumbs or crushed rice cakes'],
-    ['spice blend', 'check the label — some blends use wheat as a filler'],
-    ['sauce', 'check the label — some sauces sneak in wheat']
-  ];
-  var EGG_HINTS = [
-    ['mayonnaise', 'use a vegan mayo'],
-    ['mayo', 'use a vegan mayo'],
-    ['egg wash', 'brush with plant milk instead'],
-    ['fresh pasta', 'use dried egg-free pasta or gluten-free pasta'],
-    ['eggs', 'leave out or use a flax egg'],
-    ['egg', 'leave out or use a flax egg']
-  ];
-  var ANIMAL_HINTS = [
-    ['chicken', 'swap for butter beans, chickpeas or tofu'],
-    ['beef', 'swap for lentils or a plant mince'],
-    ['pork', 'swap for jackfruit or tempeh'],
-    ['bacon', 'swap for smoked tempeh or mushroom bacon'],
-    ['salmon', 'swap for a marinated tofu fillet'],
-    ['shrimp', 'swap for king oyster mushrooms'],
-    ['prawns', 'swap for king oyster mushrooms'],
-    ['fish', 'swap for marinated tofu or hearts of palm'],
-    ['cheese', 'use a dairy-free cheese'],
-    ['yogurt', 'use a coconut or soy yogurt'],
-    ['cream', 'use oat cream or coconut cream'],
-    ['milk', 'use oat or soy milk'],
-    ['butter', 'use a dairy-free butter or olive oil'],
-    ['honey', 'use maple syrup or agave']
+  var RESTRICTION_HINTS = [
+    // Named allergens first, most specific keyword wins.
+    { flag: 'flaxseed', keywords: ['flaxseed', 'flax seed', 'linseed', 'flax egg'], substitute: 'leave out or use a chia egg instead' },
+    { flag: 'cashew', keywords: ['cashew'], substitute: 'swap for sunflower or pumpkin seeds, or omit' },
+    { flag: 'pistachio', keywords: ['pistachio'], substitute: 'swap for sunflower or pumpkin seeds, or omit' },
+    { flag: 'hazelnut', keywords: ['hazelnut', 'filbert'], substitute: 'swap for sunflower or pumpkin seeds, or omit' },
+    { flag: 'mushroom', keywords: ['mushroom', 'porcini', 'shiitake', 'portobello', 'cremini'], substitute: 'swap for extra onion/pepper or butter beans for texture, or omit' },
+    { flag: 'gliadin', keywords: ['gliadin'], substitute: 'same as gluten-free — check for wheat-derived ingredients' },
+    { flag: 'orange', keywords: ['orange'], substitute: 'swap for lemon or another citrus if tolerated, or omit' },
+    { flag: 'cuttlefish', keywords: ['cuttlefish'], substitute: 'no confident substitute — omit or ask' },
+    { flag: 'brewers-yeast', keywords: ['brewer’s yeast', 'brewers yeast', "brewer's yeast"], substitute: 'check for hidden sources (some stocks, beers, spreads) — omit if present' },
+    { flag: 'lobster', keywords: ['lobster'], substitute: 'no confident substitute — omit or ask' },
+    // Egg white family — whole eggs carry the white, so treat "egg"/"eggs" generically as this flag.
+    { flag: 'egg-white', keywords: ['egg white', 'egg whites', 'meringue', 'egg wash', 'fresh pasta', 'mayonnaise', 'mayo', 'eggs', 'egg'], substitute: 'use aquafaba or a flax egg' },
+    // Gluten-free family.
+    { flag: 'not-gluten-free', keywords: ['soy sauce'], substitute: 'use tamari' },
+    { flag: 'not-gluten-free', keywords: ['stock'], substitute: 'check the label or use a certified gluten-free stock' },
+    { flag: 'not-gluten-free', keywords: ['oats'], substitute: 'use certified gluten-free oats' },
+    { flag: 'not-gluten-free', keywords: ['gnocchi'], substitute: 'use gluten-free gnocchi' },
+    { flag: 'not-gluten-free', keywords: ['pasta', 'noodles'], substitute: 'use gluten-free pasta' },
+    { flag: 'not-gluten-free', keywords: ['tortilla'], substitute: 'use corn or gluten-free tortillas' },
+    { flag: 'not-gluten-free', keywords: ['breadcrumbs'], substitute: 'use gluten-free breadcrumbs or crushed rice cakes' },
+    { flag: 'not-gluten-free', keywords: ['spice blend'], substitute: 'check the label — some blends use wheat as a filler' },
+    { flag: 'not-gluten-free', keywords: ['sauce'], substitute: 'check the label — some sauces sneak in wheat' },
+    // Cow's milk / dairy family — broadest net, checked last.
+    { flag: 'cow-milk', keywords: ['cheese', 'yogurt', 'buttermilk', 'cream', 'butter', 'milk'], substitute: 'use a plant-based version (oat, soy or almond)' }
   ];
 
   function autoFlagIngredient(name){
     var n = (name||'').toLowerCase();
     if (!n.trim()) return null;
-    for (var i=0;i<EGG_HINTS.length;i++){ if (n.indexOf(EGG_HINTS[i][0])!==-1) return { flag:'contains-egg', substitute:EGG_HINTS[i][1] }; }
-    for (var j=0;j<GLUTEN_HINTS.length;j++){ if (n.indexOf(GLUTEN_HINTS[j][0])!==-1) return { flag:'not-gluten-free', substitute:GLUTEN_HINTS[j][1] }; }
-    for (var k=0;k<ANIMAL_HINTS.length;k++){ if (n.indexOf(ANIMAL_HINTS[k][0])!==-1) return { flag:'not-vegan', substitute:ANIMAL_HINTS[k][1] }; }
+    for (var i=0;i<RESTRICTION_HINTS.length;i++){
+      var rule = RESTRICTION_HINTS[i];
+      for (var j=0;j<rule.keywords.length;j++){
+        if (n.indexOf(rule.keywords[j]) !== -1) return { flag: rule.flag, substitute: rule.substitute };
+      }
+    }
     return null;
   }
 
@@ -263,6 +284,46 @@
   function newIngredient(){ return { item:'', quantity:'', unit:'', section:'other', pantryStaple:false, flag:null, substitute:'' }; }
   function newDietFlag(){ return { rule:'', substitute:'' }; }
 
+  // Coerces whatever a meal document actually holds into the shape every render
+  // function assumes. Applied at every point data enters the app (db snapshots,
+  // localStorage, AI extraction) so a malformed or missing field anywhere upstream
+  // (a bad AI response, an older record, hand-edited JSON) can never reach render()
+  // as undefined and take the whole page down with it.
+  function normalizeMeal(raw){
+    raw = raw || {};
+    return {
+      id: raw.id != null ? raw.id : null,
+      name: typeof raw.name === 'string' ? raw.name : '',
+      base: typeof raw.base === 'string' ? raw.base : '',
+      effort: typeof raw.effort === 'string' ? raw.effort : '',
+      effortMinutes: raw.effortMinutes != null ? raw.effortMinutes : '',
+      tier: TIERS.indexOf(raw.tier) !== -1 ? raw.tier : 'unranked',
+      servings: raw.servings || 4,
+      method: typeof raw.method === 'string' ? raw.method : '',
+      notes: typeof raw.notes === 'string' ? raw.notes : '',
+      sourceUrl: typeof raw.sourceUrl === 'string' ? raw.sourceUrl : '',
+      dietFlags: Array.isArray(raw.dietFlags) ? raw.dietFlags.map(function(f){
+        f = f || {};
+        return { rule: typeof f.rule === 'string' ? f.rule : '', substitute: typeof f.substitute === 'string' ? f.substitute : '' };
+      }) : [],
+      ingredients: Array.isArray(raw.ingredients) ? raw.ingredients.map(function(i){
+        i = i || {};
+        return {
+          item: typeof i.item === 'string' ? i.item : '',
+          quantity: i.quantity != null ? String(i.quantity) : '',
+          unit: typeof i.unit === 'string' ? i.unit : '',
+          section: SECTIONS.indexOf(i.section) !== -1 ? i.section : 'other',
+          pantryStaple: !!i.pantryStaple,
+          flag: i.flag || null,
+          substitute: typeof i.substitute === 'string' ? i.substitute : ''
+        };
+      }) : [],
+      lastCooked: typeof raw.lastCooked === 'string' ? raw.lastCooked : '',
+      timesCooked: raw.timesCooked || 0,
+      createdAt: raw.createdAt, updatedAt: raw.updatedAt
+    };
+  }
+
   // ---------- state ----------
   var currentTab = 'week';
   var meals = [];
@@ -281,13 +342,20 @@
     adjustInstruction:'', adjusting:false, adjustError:null, adjustApplied:false,
     expandedMealId: null,
     confirmDeleteId: null,
+    confirmNewWeek: false,
+    confirmAutoPick: false,
     toast: null,
     copyFallbackText: null
   };
 
   // ---------- storage: db capability, falls back to localStorage ----------
   var LS_MEALS = 'mp_meals_v1', LS_WEEK = 'mp_week_v1';
-  function localGetMeals(){ try { return JSON.parse(localStorage.getItem(LS_MEALS)||'[]'); } catch(e){ return []; } }
+  function localGetMeals(){
+    try {
+      var list = JSON.parse(localStorage.getItem(LS_MEALS)||'[]');
+      return Array.isArray(list) ? list.map(normalizeMeal) : [];
+    } catch(e){ return []; }
+  }
   function localSaveMeals(list){ localStorage.setItem(LS_MEALS, JSON.stringify(list)); meals = list; render(); }
   function localGetWeek(){ try { return JSON.parse(localStorage.getItem(LS_WEEK)||'null'); } catch(e){ return null; } }
   function localSaveWeek(w){ localStorage.setItem(LS_WEEK, JSON.stringify(w)); weekDoc = w; render(); }
@@ -342,7 +410,7 @@
     }
     db = namespace;
     db.collection('meals').onSnapshot(function(qs){
-      meals = qs.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+      meals = qs.docs.map(function(d){ return normalizeMeal(Object.assign({id:d.id}, d.data())); });
       dataLoaded = true;
       render();
     }, function(){ localMode = true; meals = localGetMeals(); dataLoaded = true; render(); });
@@ -378,6 +446,37 @@
     var shared = Object.keys(itemCount).filter(function(k){ return itemCount[k] >= 2; }).length;
     if (shared > 0) infos.push(shared+' ingredient'+(shared===1?'':'s')+' shared across two or more of these picks — one purchase covers both.');
     return { warnings: warnings, infos: infos };
+  }
+
+  // Weighted-random auto-pick. Every meal starts at weight 1 (pure random) —
+  // as soon as tiers get set, "often" and "sometimes" pull ahead proportionally
+  // while "rarely"/"unranked" stay in the running, so the pick trends toward the
+  // household's actual rankings without ever fully excluding anything. A meal
+  // within its tier's cooldown window is heavily deprioritized (not excluded, so
+  // a short list of meals still produces 5 picks) rather than enforced as a rule.
+  var TIER_WEIGHT = { often: 4, sometimes: 2, rarely: 1, unranked: 1 };
+  function weightForAutoPick(m){
+    var w = TIER_WEIGHT[m.tier || 'unranked'] || 1;
+    var d = daysSince(m.lastCooked);
+    if (m.tier === 'sometimes' && d < 24) w *= 0.15;
+    if (m.tier === 'rarely' && d < 75) w *= 0.1;
+    return w;
+  }
+  function weightedPickWithoutReplacement(pool, n){
+    var candidates = pool.slice();
+    var chosen = [];
+    for (var k=0; k<n && candidates.length>0; k++){
+      var weights = candidates.map(weightForAutoPick);
+      var total = weights.reduce(function(a,b){ return a+b; }, 0);
+      if (total <= 0){ weights = candidates.map(function(){ return 1; }); total = candidates.length; }
+      var r = Math.random() * total;
+      var idx = 0;
+      for (; idx < weights.length; idx++){ r -= weights[idx]; if (r <= 0) break; }
+      if (idx >= candidates.length) idx = candidates.length - 1;
+      chosen.push(candidates[idx]);
+      candidates.splice(idx, 1);
+    }
+    return chosen;
   }
 
   function buildGroceryList(selected){
@@ -498,6 +597,17 @@
     return text.trim();
   }
 
+  var FLAG_ENUM_STR = Object.keys(FLAG_LABELS).map(function(k){ return '"'+k+'"'; }).join('|');
+  var HOUSEHOLD_RULES_TEXT = 'Household dietary restrictions to flag against: strictly gluten-free (flag common gluten '
+    + 'culprits like soy sauce, stock, oats, pasta, gnocchi, tortillas, breadcrumbs, spice blends), plus these specific '
+    + 'allergens whenever they appear: egg white (treat whole eggs, mayonnaise, and meringue as this too — the white is '
+    + 'always present), flaxseed or linseed, cashew, pistachio, hazelnut, mushroom, gliadin, orange, cuttlefish, '
+    + 'brewer’s yeast, lobster, and cow’s milk (including cheese, yogurt, butter, and cream). This household is not '
+    + 'vegan — meat, fish and non-cow dairy are fine unless they trip one of the allergens above. Flag each affected '
+    + 'ingredient with the specific restriction it breaks and a substitute only where there is a genuinely safe, '
+    + 'well-established one — say there is no confident substitute rather than guessing for something like a shellfish '
+    + 'allergy.';
+
   function buildExtractionPrompt(text, sourceUrl){
     var schema = '{\n'
       + ' "name": string,\n'
@@ -506,11 +616,11 @@
       + ' "effortMinutes": number (best-guess total active+cook minutes),\n'
       + ' "servings": number (as written, or 4 if unclear),\n'
       + ' "method": string (numbered steps, one per line, in plain everyday language),\n'
-      + ' "dietFlags": [{"rule": string, "substitute": string}] for any of the three household rules this dish breaks as written,\n'
-      + ' "ingredients": [{"item": string, "quantity": string, "unit": string, "section": "produce"|"protein"|"dairy-and-chilled"|"tins-and-dry-goods"|"freezer"|"other", "pantryStaple": boolean, "flag": "not-gluten-free"|"not-vegan"|"contains-egg"|null, "substitute": string}]\n'
+      + ' "dietFlags": [{"rule": string, "substitute": string}] for any of the household rules this dish breaks as written,\n'
+      + ' "ingredients": [{"item": string, "quantity": string, "unit": string, "section": "produce"|"protein"|"dairy-and-chilled"|"tins-and-dry-goods"|"freezer"|"other", "pantryStaple": boolean, "flag": ' + FLAG_ENUM_STR + '|null, "substitute": string}]\n'
       + '}';
     return 'You are filling in a structured recipe record for a household meal-planning app.\n\n'
-      + 'Household rules to flag against: strictly gluten-free (flag common gluten culprits like soy sauce, stock, oats, pasta, gnocchi, tortillas, breadcrumbs, spice blends, and suggest a substitute), no eggs ever including hidden ones like mayonnaise or egg wash (flag and suggest a substitute), and a preference for the plant-based version of a dish when it works either way (flag meat/dairy ingredients as not-vegan with a substitute, without removing them).\n\n'
+      + HOUSEHOLD_RULES_TEXT + '\n\n'
       + 'Reply with ONLY a JSON object with exactly this shape, no other text:\n' + schema + '\n\n'
       + 'Recipe text:\n"""\n' + text.slice(0,6000) + '\n"""'
       + (sourceUrl ? ('\n\nOriginal source (context only, do not fetch it): ' + sourceUrl) : '');
@@ -550,12 +660,9 @@
       + '"dietFlags": [{"rule": string, "substitute": string}], '
       + '"ingredients": [{"item": string, "quantity": string, "unit": string, '
       + '"section": "produce"|"protein"|"dairy-and-chilled"|"tins-and-dry-goods"|"freezer"|"other", '
-      + '"pantryStaple": boolean, "flag": "not-gluten-free"|"not-vegan"|"contains-egg"|null, "substitute": string} ] }';
+      + '"pantryStaple": boolean, "flag": ' + FLAG_ENUM_STR + '|null, "substitute": string} ] }';
     return 'You are adjusting an existing recipe record for a household meal-planning app, based on a requested change.\n\n'
-      + 'Household rules to respect unless the requested change itself deliberately overrides one: strictly gluten-free '
-      + '(flag common gluten culprits with a substitute), no eggs ever (flag and suggest a substitute), and prefer the '
-      + 'plant-based option when a dish works either way (flag meat/dairy as not-vegan with a substitute, without '
-      + 'necessarily removing it).\n\n'
+      + HOUSEHOLD_RULES_TEXT + ' Respect these unless the requested change itself deliberately overrides one.\n\n'
       + 'Current recipe (JSON):\n' + JSON.stringify(current, null, 2) + '\n\n'
       + 'Requested change: ' + instruction + '\n\n'
       + 'Reply with ONLY a JSON object with exactly this shape, reflecting the FULL recipe after applying the change '
@@ -591,24 +698,38 @@
     // over the shared db, not just a local click, and that must never erase typing
     // that hasn't been explicitly saved yet.
     if (ui.formOpen && ui.formDraft && document.getElementById('form-overlay')){
-      syncFormDraftFromDom();
+      try { syncFormDraftFromDom(); } catch(e){}
     }
 
-    var html = header();
-    if (!dataLoaded){
-      html += '<div class="card hero"><p>Loading the list&hellip;</p></div>';
+    // A crash anywhere in the render below (bad data, an edge case this code
+    // missed) used to leave the page frozen mid-rebuild with no way back short of
+    // reloading — which, since the bad state usually persists, reloaded straight
+    // into the same crash. This boundary catches that instead and offers a way
+    // back to a known-good screen.
+    try {
+      var html = header();
+      if (!dataLoaded){
+        html += '<div class="card hero"><p>Loading the list&hellip;</p></div>';
+        app.innerHTML = html;
+        return;
+      }
+      if (currentTab === 'week') html += renderWeekTab();
+      else if (currentTab === 'meals') html += renderMealsTab();
+      else if (currentTab === 'import') html += renderImportTab();
+
+      if (ui.formOpen) html += renderMealFormOverlay();
+      if (ui.weekPickerOpen) html += renderWeekPickerOverlay();
+      html += footnote();
+      if (ui.toast) html += '<div class="toast">'+escapeHtml(ui.toast)+'</div>';
       app.innerHTML = html;
+    } catch(err){
+      app.innerHTML = header() + '<div class="card" style="margin-top:16px;">' +
+        '<h3 style="margin-bottom:8px;">Something went wrong showing this screen</h3>' +
+        '<p class="muted" style="margin-bottom:12px;">'+escapeHtml(err && err.message ? err.message : String(err))+'</p>' +
+        '<button class="btn btn-primary" data-action="recoverFromError">Back to This Week</button>' +
+      '</div>';
       return;
     }
-    if (currentTab === 'week') html += renderWeekTab();
-    else if (currentTab === 'meals') html += renderMealsTab();
-    else if (currentTab === 'import') html += renderImportTab();
-
-    if (ui.formOpen) html += renderMealFormOverlay();
-    if (ui.weekPickerOpen) html += renderWeekPickerOverlay();
-    html += footnote();
-    if (ui.toast) html += '<div class="toast">'+escapeHtml(ui.toast)+'</div>';
-    app.innerHTML = html;
 
     if (focusInfo){
       var el = document.getElementById(focusInfo.id);
@@ -658,15 +779,23 @@
       html += '<div class="card hero"><span class="eyebrow">'+ (weekDoc ? 're-up for next week' : 'new here') +'</span>' +
         '<h2>Ready to plan this week’s five?</h2>' +
         '<p>Pick five meals for the week. Two nights are always yours &mdash; takeout, leftovers, eating out, whatever’s easiest.</p>' +
-        '<button class="btn btn-primary" data-action="startWeek">Let’s pick</button></div>';
+        '<div class="row-actions" style="justify-content:center;">' +
+          '<button class="btn btn-primary" data-action="startWeek">Let’s pick</button>' +
+          '<button class="btn btn-ghost" data-action="autoPickWeek">Auto-pick for me</button>' +
+        '</div></div>';
       return html;
     }
     var rules = computeWarnings(picked);
-    html += '<div class="section-head"><h2>This week’s five</h2>' +
-      (ui.confirmNewWeek
-        ? '<span class="row-actions"><span class="muted">Clear this week’s picks?</span><button class="btn-link" data-action="confirmNewWeek">Yes, start fresh</button><button class="btn-link" data-action="cancelNewWeek">Cancel</button></span>'
-        : '<button class="btn btn-ghost btn-sm" data-action="askNewWeek">Start a new week</button>') +
-      '</div>';
+    html += '<div class="section-head"><h2>This week’s five</h2>';
+    if (ui.confirmNewWeek){
+      html += '<span class="row-actions"><span class="muted">Clear this week’s picks?</span><button class="btn-link" data-action="confirmNewWeek">Yes, start fresh</button><button class="btn-link" data-action="cancelNewWeek">Cancel</button></span>';
+    } else if (ui.confirmAutoPick){
+      html += '<span class="row-actions"><span class="muted">Replace with a random pick?</span><button class="btn-link" data-action="autoPickWeek">Yes, auto-pick</button><button class="btn-link" data-action="cancelAutoPick">Cancel</button></span>';
+    } else {
+      html += '<span class="row-actions"><button class="btn btn-ghost btn-sm" data-action="autoPickWeek">Auto-pick</button>' +
+        '<button class="btn btn-ghost btn-sm" data-action="askNewWeek">Start a new week</button></span>';
+    }
+    html += '</div>';
     html += '<div class="slots">';
     var weekIds = getWeekIds();
     for (var i=0;i<5;i++){
@@ -798,34 +927,51 @@
     var currentWeekIds = getWeekIds();
     var weekFull = currentWeekIds.indexOf(null) === -1;
     list.forEach(function(m){
-      var expanded = ui.expandedMealId === m.id;
-      var inWeek = currentWeekIds.indexOf(m.id) !== -1;
-      html += '<div class="meal-row-wrap"><div class="meal-row"><div class="m-info">' +
-        '<button type="button" class="m-name-btn" data-action="toggleMealView" data-id="'+m.id+'">'+escapeHtml(m.name)+'</button>' +
-        '<div class="m-meta">' +
-          '<span class="chip tier-'+(m.tier||'unranked')+'">'+TIER_LABELS[m.tier||'unranked']+'</span>' +
-          (m.base ? '<span class="muted">'+escapeHtml(m.base)+'</span>' : '') +
-          (m.effort ? '<span class="muted mono">'+escapeHtml(m.effort)+'</span>' : '') +
-          (inWeek ? '<span class="chip in-week">In this week</span>' : '') +
-          (m.dietFlags && m.dietFlags.length ? m.dietFlags.map(function(){ return '<span class="chip flag">household rule</span>'; }).slice(0,1).join('') : '') +
-        '</div></div>' +
-        '<div class="row-actions">';
-      if (ui.confirmDeleteId === m.id){
-        html += '<span class="muted">Delete for good?</span> <button class="btn-link" data-action="confirmDelete" data-id="'+m.id+'">Yes, delete</button> <button class="btn-link" data-action="cancelDelete" data-id="'+m.id+'">Cancel</button>';
-      } else {
-        if (inWeek){
-          html += '<button class="btn btn-ghost btn-sm" data-action="removeMealFromWeekById" data-id="'+m.id+'">Remove from week</button>';
-        } else {
-          html += '<button class="btn btn-ghost btn-sm" data-action="addMealToWeek" data-id="'+m.id+'"'+(weekFull?' disabled title="This week already has 5 picks"':'')+'>'+(weekFull?'Week full':'+ Add to week')+'</button>';
-        }
-        html += '<button class="btn btn-ghost btn-sm" data-action="toggleMealView" data-id="'+m.id+'">'+(expanded?'Hide':'View')+'</button>' +
-          '<button class="btn btn-ghost btn-sm" data-action="editMeal" data-id="'+m.id+'">Edit</button>' +
-          '<button class="btn-link" data-action="askDelete" data-id="'+m.id+'">Delete</button>';
+      // One meal with an unexpected shape (a bad AI response, a hand-edited
+      // record) shouldn't hide every other meal in the list — isolate it here
+      // instead of letting it reach the render() top-level boundary.
+      try {
+        html += renderMealRow(m, currentWeekIds, weekFull);
+      } catch(err){
+        html += '<div class="meal-row-wrap"><div class="meal-row"><div class="m-info">' +
+          '<div class="m-name-btn">'+escapeHtml((m && m.name) || 'A meal')+'</div>' +
+          '<div class="g-flag">Couldn’t display this one (' + escapeHtml(err && err.message ? err.message : 'unknown error') + ')</div>' +
+          '</div><div class="row-actions">' +
+          (m && m.id ? '<button class="btn-link" data-action="askDelete" data-id="'+m.id+'">Delete</button>' : '') +
+          '</div></div></div>';
       }
-      html += '</div></div>';
-      if (expanded) html += renderMealDetail(m);
-      html += '</div>';
     });
+    html += '</div>';
+    return html;
+  }
+
+  function renderMealRow(m, currentWeekIds, weekFull){
+    var expanded = ui.expandedMealId === m.id;
+    var inWeek = currentWeekIds.indexOf(m.id) !== -1;
+    var html = '<div class="meal-row-wrap"><div class="meal-row"><div class="m-info">' +
+      '<button type="button" class="m-name-btn" data-action="toggleMealView" data-id="'+m.id+'">'+escapeHtml(m.name)+'</button>' +
+      '<div class="m-meta">' +
+        '<span class="chip tier-'+(m.tier||'unranked')+'">'+TIER_LABELS[m.tier||'unranked']+'</span>' +
+        (m.base ? '<span class="muted">'+escapeHtml(m.base)+'</span>' : '') +
+        (m.effort ? '<span class="muted mono">'+escapeHtml(m.effort)+'</span>' : '') +
+        (inWeek ? '<span class="chip in-week">In this week</span>' : '') +
+        (m.dietFlags && m.dietFlags.length ? m.dietFlags.map(function(){ return '<span class="chip flag">household rule</span>'; }).slice(0,1).join('') : '') +
+      '</div></div>' +
+      '<div class="row-actions">';
+    if (ui.confirmDeleteId === m.id){
+      html += '<span class="muted">Delete for good?</span> <button class="btn-link" data-action="confirmDelete" data-id="'+m.id+'">Yes, delete</button> <button class="btn-link" data-action="cancelDelete" data-id="'+m.id+'">Cancel</button>';
+    } else {
+      if (inWeek){
+        html += '<button class="btn btn-ghost btn-sm" data-action="removeMealFromWeekById" data-id="'+m.id+'">Remove from week</button>';
+      } else {
+        html += '<button class="btn btn-ghost btn-sm" data-action="addMealToWeek" data-id="'+m.id+'"'+(weekFull?' disabled title="This week already has 5 picks"':'')+'>'+(weekFull?'Week full':'+ Add to week')+'</button>';
+      }
+      html += '<button class="btn btn-ghost btn-sm" data-action="toggleMealView" data-id="'+m.id+'">'+(expanded?'Hide':'View')+'</button>' +
+        '<button class="btn btn-ghost btn-sm" data-action="editMeal" data-id="'+m.id+'">Edit</button>' +
+        '<button class="btn-link" data-action="askDelete" data-id="'+m.id+'">Delete</button>';
+    }
+    html += '</div></div>';
+    if (expanded) html += renderMealDetail(m);
     html += '</div>';
     return html;
   }
@@ -945,6 +1091,7 @@
     return html;
   }
   function renderDietRows(rows){
+    rows = rows || [];
     if (!rows.length) return '<p class="muted" style="margin-bottom:8px;">No flags — this dish is fine as written.</p>';
     return rows.map(function(r, i){
       return '<div class="diet-row" data-row-index="'+i+'">' +
@@ -955,8 +1102,10 @@
     }).join('');
   }
   function renderIngredientRows(rows){
+    rows = rows || [];
     if (!rows.length) return '<p class="muted" style="margin-bottom:8px;">No ingredients yet.</p>';
     return rows.map(function(r, i){
+      r = r || {};
       return '<div class="sub-row" data-row-index="'+i+'">' +
         '<input type="text" data-field="item" placeholder="Item" value="'+escapeHtml(r.item)+'" data-action-blur="autoFlagRow">' +
         '<input type="text" data-field="quantity" placeholder="Qty" value="'+escapeHtml(r.quantity)+'">' +
@@ -984,9 +1133,17 @@
       '<select data-action="weekPickerTier"><option value="">All tiers</option>' + TIERS.map(function(t){ return '<option value="'+t+'"'+(ui.weekPickerFilterTier===t?' selected':'')+'>'+TIER_LABELS[t]+'</option>'; }).join('') + '</select></div>';
     if (!list.length) html += '<p class="muted">No meals match.</p>';
     list.forEach(function(m){
-      var alreadyIn = used.indexOf(m.id) !== -1;
-      html += '<button class="pick-option" data-action="chooseWeekMeal" data-id="'+m.id+'"><span><strong>'+escapeHtml(m.name)+'</strong> <span class="muted">'+escapeHtml(m.base||'')+'</span></span>' +
-        '<span class="chip tier-'+(m.tier||'unranked')+'">'+TIER_LABELS[m.tier||'unranked']+(alreadyIn?' &middot; in this week':'')+'</span></button>';
+      try {
+        var alreadyIn = used.indexOf(m.id) !== -1;
+        var expanded = ui.expandedMealId === m.id;
+        html += '<div class="pick-row"><div class="pick-main">' +
+          '<button class="pick-option" data-action="chooseWeekMeal" data-id="'+m.id+'"><span><strong>'+escapeHtml(m.name)+'</strong> <span class="muted">'+escapeHtml(m.base||'')+'</span></span>' +
+          '<span class="chip tier-'+(m.tier||'unranked')+'">'+TIER_LABELS[m.tier||'unranked']+(alreadyIn?' &middot; in this week':'')+'</span></button>' +
+          '<button type="button" class="btn-link pick-view-btn" data-action="toggleMealView" data-id="'+m.id+'">'+(expanded?'Hide':'View recipe')+'</button>' +
+          '</div>' +
+          (expanded ? renderMealDetail(m) : '') +
+        '</div>';
+      } catch(err){ /* skip a malformed meal rather than break the whole picker */ }
     });
     html += '</div></div>';
     return html;
@@ -1021,6 +1178,12 @@
 
   var actions = {
     setTab: function(el, id){ currentTab = id; ui.weekPickerOpen=false; render(); },
+    recoverFromError: function(){
+      ui.formOpen = false; ui.formDraft = null; ui.weekPickerOpen = false; ui.expandedMealId = null;
+      ui.confirmDeleteId = null; ui.confirmNewWeek = false; ui.confirmAutoPick = false;
+      currentTab = 'week';
+      render();
+    },
 
     addMeal: function(){ resetAdjustState(); ui.formDraft = blankMeal(); ui.formOpen = true; render(); },
     editMeal: function(el, id){ var m = meals.find(function(x){ return x.id===id; }); if (!m) return; resetAdjustState(); ui.formDraft = JSON.parse(JSON.stringify(m)); ui.formOpen = true; render(); },
@@ -1052,6 +1215,17 @@
       ui.confirmNewWeek = false;
       updateWeek({ weekStart: mondayIso(), mealIds: [null,null,null,null,null], checkedItems: {}, started: true });
     },
+    autoPickWeek: function(){
+      var hasExisting = getWeekIds().some(function(x){ return x; });
+      if (hasExisting && !ui.confirmAutoPick){ ui.confirmAutoPick = true; render(); return; }
+      ui.confirmAutoPick = false;
+      if (!meals.length){ render(); return; }
+      var picks = weightedPickWithoutReplacement(meals, Math.min(5, meals.length));
+      var ids = picks.map(function(m){ return m.id; });
+      while (ids.length < 5) ids.push(null);
+      updateWeek({ mealIds: ids, weekStart: (weekDoc && weekDoc.weekStart) || mondayIso(), started: true });
+    },
+    cancelAutoPick: function(){ ui.confirmAutoPick = false; render(); },
     openWeekPicker: function(el, id){ ui.weekPickerOpen = true; ui.weekPickerSlot = parseInt(id,10); ui.weekPickerSearch=''; ui.weekPickerFilterTier=''; render(); },
     closeWeekPicker: function(){ ui.weekPickerOpen = false; render(); },
     weekPickerSearch: function(el){ ui.weekPickerSearch = el.value; render(); },
