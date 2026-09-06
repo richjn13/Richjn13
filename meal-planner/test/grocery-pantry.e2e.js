@@ -79,7 +79,7 @@ const rowFor = (page, name) => page.locator('.g-item', { hasText: name }).first(
   check('chopped tomatoes unmatched before AI', await rowFor(page, 'chopped tomatoes').locator('.chip.in-pantry').count(), 0);
 
   // --- run the AI pantry check ---
-  await page.click('button:has-text("Check pantry with AI")');
+  await page.click('button:has-text("Tidy list with AI")');
   await page.waitForTimeout(600);
   check('AI matched chopped tomatoes', await rowFor(page, 'chopped tomatoes').locator('.chip.in-pantry').count(), 1);
   check('AI match names the covering staple',

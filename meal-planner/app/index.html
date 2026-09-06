@@ -656,36 +656,68 @@
     return chosen;
   }
 
+  // Plural forms shouldn't split a line ("garlic clove" / "garlic cloves"), so the
+  // grouping key is singularised. Anything beyond that — "garlic" vs "garlic
+  // cloves", "ginger" vs "fresh ginger" — needs the AI pass, which writes its
+  // findings into weekDoc.itemAliases as variant -> canonical.
+  function singulariseWord(w){
+    if (w.length > 4 && /(ses|xes|zes|ches|shes)$/.test(w)) return w.slice(0,-2);
+    if (w.length > 4 && /ies$/.test(w)) return w.slice(0,-3)+'y';
+    if (w.length > 4 && /oes$/.test(w)) return w.slice(0,-2);
+    if (w.length > 3 && /s$/.test(w) && !/(ss|us|is)$/.test(w)) return w.slice(0,-1);
+    return w;
+  }
+  function aliasFor(name){
+    var aliases = (weekDoc && weekDoc.itemAliases) || {};
+    return aliases[normalizePantryTerm(name)] || null;
+  }
+  function canonicalItemKey(name){
+    var base = aliasFor(name) || name;
+    return normalizePantryTerm(base).split(' ').map(singulariseWord).join(' ');
+  }
+
   function buildGroceryList(selected){
     var combined = {};
     selected.forEach(function(m){
       var scale = 4 / (parseFloat(m.servings) || 4);
       (m.ingredients||[]).forEach(function(ing){
         if (!ing.item) return;
-        var key = ing.item.trim().toLowerCase()+'|'+(ing.unit||'').trim().toLowerCase();
+        // Keyed on the ingredient alone, NOT ingredient+unit: merging duplicates
+        // matters more than keeping units apart, so totals are tracked per unit
+        // and rendered together ("3 cloves + 1 bulb") when a line mixes them.
+        var key = canonicalItemKey(ing.item);
+        if (!key) return;
         if (!combined[key]){
-          combined[key] = { item: ing.item, unit: ing.unit||'', qtyNum:0, qtyKnown:true, rawParts:[], meals:[], breakdown:[], section: SECTIONS.indexOf(ing.section)>=0 ? ing.section : 'other', pantryStaple: true, flag: null, substitute: '' };
+          combined[key] = {
+            item: aliasFor(ing.item) || ing.item,
+            variants: [], unitTotals: {}, rawParts: [], meals: [], breakdown: [],
+            section: SECTIONS.indexOf(ing.section)>=0 ? ing.section : 'other',
+            pantryStaple: true, flag: null, substitute: ''
+          };
         }
         var c = combined[key];
+        if (c.variants.indexOf(ing.item) === -1) c.variants.push(ing.item);
         if (c.meals.indexOf(m.name) === -1) c.meals.push(m.name);
         if (ing.flag && !c.flag){ c.flag = ing.flag; c.substitute = ing.substitute || ''; }
         if (!ing.pantryStaple) c.pantryStaple = false;
+        if (c.section === 'other' && SECTIONS.indexOf(ing.section) >= 0) c.section = ing.section;
 
+        var unit = String(ing.unit||'').trim();
         var qn = parseFloat(ing.quantity);
         var contributionNum = null, contributionRaw = null;
         if (ing.quantity !== '' && ing.quantity != null && !isNaN(qn)){
           contributionNum = qn * scale;
-          c.qtyNum += contributionNum;
-        } else {
-          c.qtyKnown = false;
-          if (ing.quantity){ contributionRaw = ing.quantity; c.rawParts.push(ing.quantity); }
+          c.unitTotals[unit] = (c.unitTotals[unit] || 0) + contributionNum;
+        } else if (ing.quantity){
+          contributionRaw = ing.quantity;
+          c.rawParts.push(ing.quantity + (unit ? ' ' + unit : ''));
         }
-        // Per-recipe breakdown so a combined line can still show which meal needs how much.
-        var existing = c.breakdown.filter(function(b){ return b.meal === m.name; })[0];
+        // Per-recipe breakdown so a merged line still shows which meal needs how much.
+        var existing = c.breakdown.filter(function(b){ return b.meal === m.name && b.unit === unit; })[0];
         if (existing){
           if (contributionNum != null && existing.num != null) existing.num += contributionNum;
         } else {
-          c.breakdown.push({ meal: m.name, num: contributionNum, raw: contributionRaw, unit: ing.unit||'' });
+          c.breakdown.push({ meal: m.name, num: contributionNum, raw: contributionRaw, unit: unit });
         }
       });
     });
@@ -694,14 +726,32 @@
       var item = combined[k];
       // Anything the household has told us it already owns is a cupboard check,
       // never a buy line — whatever the recipe's own pantryStaple flag says.
-      var match = pantryMatchFor(item.item);
+      var match = pantryMatchFor(item.item) ||
+        item.variants.map(pantryMatchFor).filter(Boolean)[0] || null;
       if (match){ item.inPantry = true; item.pantryMatch = match; item.pantryStaple = true; }
+      item.mergedFrom = item.variants.filter(function(v){
+        return normalizePantryTerm(v) !== normalizePantryTerm(item.item);
+      });
       item.waste = isLikelyWaste(item);
       bySection[item.section].push(item);
     });
     SECTIONS.forEach(function(s){ bySection[s].sort(function(a,b){ return a.item.localeCompare(b.item); }); });
     return bySection;
   }
+
+  // Totals per unit, joined — "5 cloves", or "3 cloves + 1 bulb" when a merged
+  // line genuinely mixes measures rather than pretending they add up.
+  function formatQty(item){
+    var parts = Object.keys(item.unitTotals || {}).filter(function(u){ return item.unitTotals[u]; })
+      .map(function(u){
+        var n = Math.round(item.unitTotals[u]*100)/100;
+        return n + (u ? ' '+u : '');
+      });
+    (item.rawParts || []).forEach(function(r){ parts.push(r); });
+    if (!parts.length) return 'amount varies — check the recipe';
+    return parts.join(' + ');
+  }
+
   // "Small amount for one meal" is only worth saying when you're forced to buy a
   // whole pack for a spoonful — a bunch of coriander for one tbsp. Used to fire on
   // anything a single meal needed, which was almost every line and therefore noise:
@@ -709,10 +759,13 @@
   var PARTIAL_PACK_UNITS = { tsp:1, tbsp:1, sprig:1, sprigs:1, clove:1, cloves:1, pinch:1, pinches:1, handful:1, handfuls:1, stick:1, sticks:1, leaf:1, leaves:1 };
   function isLikelyWaste(item){
     if (item.meals.length !== 1 || item.pantryStaple) return false;
-    var unit = String(item.unit||'').toLowerCase().trim();
-    if (PARTIAL_PACK_UNITS[unit]) return true;
-    if (!item.qtyKnown) return false;
-    if ((unit === 'g' || unit === 'ml') && item.qtyNum > 0 && item.qtyNum <= 60) return true;
+    var units = Object.keys(item.unitTotals || {});
+    for (var i=0;i<units.length;i++){
+      var unit = units[i].toLowerCase().trim();
+      var qty = item.unitTotals[units[i]];
+      if (PARTIAL_PACK_UNITS[unit]) return true;
+      if ((unit === 'g' || unit === 'ml') && qty > 0 && qty <= 60) return true;
+    }
     return false;
   }
 
@@ -723,15 +776,6 @@
     }
     if (b.raw) return b.raw + (b.unit ? ' '+b.unit : '');
     return b.unit || 'amount varies';
-  }
-
-  function formatQty(item){
-    if (item.qtyKnown && item.qtyNum){
-      var n = Math.round(item.qtyNum*100)/100;
-      return n + (item.unit ? ' '+item.unit : '');
-    }
-    if (item.rawParts.length) return item.rawParts.join(' + ') + (item.unit ? ' '+item.unit : '');
-    return item.unit || 'amount varies — check the recipe';
   }
 
   // ---------- clipboard ----------
@@ -897,19 +941,27 @@
   // that a near-miss is worse than a miss: telling someone they already have
   // something they don't means the meal can't be cooked.
   function buildPantryMatchPrompt(pantryList, itemNames){
-    return 'A household keeps a list of staples it always has in. Decide which items on this week’s '
-      + 'shopping list are already covered by those staples.\n\n'
-      + 'Match on the actual ingredient, allowing for different wording, brand, form or packaging '
-      + '("chopped tomatoes" is covered by "tinned tomatoes"; "vegetable bouillon" by "stock"; '
-      + '"extra virgin olive oil" by "olive oil").\n\n'
-      + 'Do NOT match different ingredients that merely sound alike or belong to the same family: '
-      + 'butter does not cover butter beans, plain flour does not cover cornflour, white wine vinegar '
-      + 'does not cover white wine, milk does not cover coconut milk. When you are unsure, leave it '
-      + 'out — a wrong match means they skip buying something they actually need and can’t cook the meal.\n\n'
-      + 'Pantry staples:\n' + pantryList.map(function(p){ return '- ' + p; }).join('\n') + '\n\n'
-      + 'Shopping list items:\n' + itemNames.map(function(i){ return '- ' + i; }).join('\n') + '\n\n'
-      + 'Reply with ONLY this JSON, listing just the confident matches:\n'
-      + '{ "matches": [ { "item": "<exact shopping list item>", "pantry": "<the staple that covers it>" } ] }';
+    var noMatchRule = 'Do NOT treat different ingredients as the same just because they sound alike or '
+      + 'belong to the same family: butter is not butter beans, plain flour is not cornflour, white wine '
+      + 'vinegar is not white wine, milk is not coconut milk, spring onion is not onion, lime is not lemon. '
+      + 'When unsure, leave it alone — a wrong call means they skip buying something they actually need '
+      + 'and can’t cook the meal.';
+    return 'Tidy up a household’s weekly shopping list. Two separate jobs.\n\n'
+      + 'JOB 1 — MERGE DUPLICATES. The list is built from several recipes that word things differently, so '
+      + 'the same ingredient can appear more than once ("garlic" and "garlic cloves"; "ginger" and "fresh '
+      + 'ginger"; "spring onions" and "scallions"). Group every set of entries that are the same thing to '
+      + 'buy, and give each group the shortest, plainest shopping name — "garlic", not "garlic cloves". '
+      + 'Only group entries that appear in the list below. Ignore differences of form or preparation that '
+      + 'don’t change what you buy (fresh/chopped/minced/whole/large). ' + noMatchRule + '\n\n'
+      + 'JOB 2 — PANTRY. Say which list entries are already covered by the household’s staples, allowing '
+      + 'for different wording, brand, form or packaging ("chopped tomatoes" covered by "tinned tomatoes"; '
+      + '"vegetable bouillon" by "stock"; "extra virgin olive oil" by "olive oil"). ' + noMatchRule + '\n\n'
+      + 'Pantry staples:\n' + (pantryList.length ? pantryList.map(function(p){ return '- ' + p; }).join('\n') : '- (none)') + '\n\n'
+      + 'Shopping list entries:\n' + itemNames.map(function(i){ return '- ' + i; }).join('\n') + '\n\n'
+      + 'Reply with ONLY this JSON. Include a duplicate group only when it has two or more entries, and a '
+      + 'pantry match only when you are confident:\n'
+      + '{ "duplicates": [ { "name": "<plain shopping name>", "entries": ["<exact entry>", "<exact entry>"] } ], '
+      + '"matches": [ { "item": "<exact entry>", "pantry": "<the staple that covers it>" } ] }';
   }
 
   function buildAdjustPrompt(draft, instruction){
@@ -1151,6 +1203,8 @@
           '<span class="g-total mono">'+escapeHtml(formatQty(item))+'</span>' +
         '</div>' +
         renderMealsLine(item) +
+        (item.mergedFrom && item.mergedFrom.length
+          ? '<div class="g-meta">Also listed as '+escapeHtml(item.mergedFrom.join(', '))+'</div>' : '') +
         (item.flag ? '<div class="g-flag">'+escapeHtml(flagLabel(item.flag))+(item.substitute? ' — '+escapeHtml(item.substitute) : ' — no solid substitute, decide in the shop')+'</div>'
           : (item.substitute ? '<div class="g-meta">Note: '+escapeHtml(item.substitute)+'</div>' : '')) +
         (item.inPantry
@@ -1166,7 +1220,7 @@
     var html = '<div class="section-head"><h2>Grocery list</h2>' +
       '<div class="row-actions">' +
         (!sampleUnavailable
-          ? '<button class="btn btn-navy btn-sm" data-action="checkPantryWithAi"'+(ui.pantryChecking?' disabled':'')+'>'+(ui.pantryChecking?'Checking…':'Check pantry with AI')+'</button>'
+          ? '<button class="btn btn-navy btn-sm" data-action="checkPantryWithAi"'+(ui.pantryChecking?' disabled':'')+'>'+(ui.pantryChecking?'Tidying…':'Tidy list with AI')+'</button>'
           : '') +
         '<button class="btn btn-forest btn-sm" data-action="copyGrocery" data-id="buy">Copy buy list</button>' +
         '<button class="btn btn-ghost btn-sm" data-action="copyGrocery" data-id="cupboard">Copy cupboard-check</button>' +
@@ -1695,11 +1749,8 @@
       return savePantry(next).then(render).catch(reportActionError);
     },
     checkPantryWithAi: async function(){
+      // Runs with an empty pantry too — merging duplicates is worth it on its own.
       if (!sampleFn || ui.pantryChecking) return;
-      if (!pantry.length){
-        ui.pantryCheckNote = 'Nothing in the pantry yet — add a few staples on the Pantry tab first.';
-        render(); return;
-      }
       var picked = selectedMeals();
       var bySection = buildGroceryList(picked);
       var names = [];
@@ -1709,25 +1760,44 @@
       ui.pantryChecking = true; ui.pantryCheckNote = null; render();
       try {
         var result = await sampleFn.json(buildPantryMatchPrompt(pantry, names));
-        var found = Array.isArray(result && result.matches) ? result.matches : [];
+        var known = {};
+        names.forEach(function(n){ known[normalizePantryTerm(n)] = n; });
+
+        // Duplicates -> variant:canonical, so buildGroceryList collapses them.
+        var aliases = {}, mergedGroups = 0;
+        (Array.isArray(result && result.duplicates) ? result.duplicates : []).forEach(function(g){
+          if (!g || !Array.isArray(g.entries)) return;
+          var entries = g.entries.filter(function(e){ return e && known[normalizePantryTerm(e)]; });
+          if (entries.length < 2) return;
+          var canonical = String(g.name || entries[0]).trim();
+          if (!canonical) return;
+          entries.forEach(function(e){ aliases[normalizePantryTerm(e)] = canonical; });
+          mergedGroups++;
+        });
+
         var map = {};
         var overrides = (weekDoc && weekDoc.pantryOverrides) || {};
         var added = 0;
-        found.forEach(function(m){
+        (Array.isArray(result && result.matches) ? result.matches : []).forEach(function(m){
           if (!m || !m.item || !m.pantry) return;
           var key = normalizePantryTerm(m.item);
-          // Never re-assert something they've explicitly waved off, and don't
-          // count what literal matching already had.
+          // Never re-assert something they've explicitly waved off.
           if (overrides[key]) return;
-          if (!names.some(function(n){ return normalizePantryTerm(n) === key; })) return;
+          if (!known[key]) return;
           map[key] = String(m.pantry);
+          // The merged line is keyed on its canonical name, so carry the match there too.
+          if (aliases[key]) map[normalizePantryTerm(aliases[key])] = String(m.pantry);
           if (!matchesLiterally(m.item)) added++;
         });
+
         ui.pantryChecking = false;
-        ui.pantryCheckNote = added
-          ? 'Matched '+added+' more item'+(added===1?'':'s')+' to your pantry. Anything wrong, hit “not really” on the line.'
-          : 'No extra matches — the list already lines up with your pantry.';
-        await updateWeek({ pantryMatches: map });
+        var bits = [];
+        if (mergedGroups) bits.push('Merged '+mergedGroups+' duplicate'+(mergedGroups===1?'':' sets')+'.');
+        if (added) bits.push('Matched '+added+' more item'+(added===1?'':'s')+' to your pantry.');
+        ui.pantryCheckNote = bits.length
+          ? bits.join(' ') + ' Anything wrong, hit “not really” on the line.'
+          : 'Nothing to tidy — no duplicates and no extra pantry matches.';
+        await updateWeek({ pantryMatches: map, itemAliases: aliases });
         render();
       } catch(e){
         ui.pantryChecking = false;
