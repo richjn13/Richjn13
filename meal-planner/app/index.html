@@ -181,6 +181,8 @@
   .g-item.checked .g-name{ text-decoration:line-through; color:var(--ink-soft); }
   .g-name{ font-weight:600; font-size:0.92rem; }
   .g-meta{ font-size:0.76rem; color:var(--ink-soft); }
+  .breakdown-list{ margin:2px 0 0; padding-left:16px; font-size:0.76rem; color:var(--ink-soft); }
+  .breakdown-list li{ margin-bottom:1px; }
   .g-flag{ font-size:0.76rem; color:var(--danger); margin-top:2px; }
   .toast{ position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--forest); color:var(--forest-ink); padding:10px 18px; border-radius:999px; font-size:0.85rem; box-shadow:var(--shadow); z-index:50; }
   .copy-fallback textarea{ width:100%; min-height:120px; margin-top:8px; border:1px solid var(--line); border-radius:8px; padding:8px; background:var(--paper); color:var(--ink); font-family:"JetBrains Mono", monospace; font-size:0.78rem; }
@@ -386,18 +388,28 @@
         if (!ing.item) return;
         var key = ing.item.trim().toLowerCase()+'|'+(ing.unit||'').trim().toLowerCase();
         if (!combined[key]){
-          combined[key] = { item: ing.item, unit: ing.unit||'', qtyNum:0, qtyKnown:true, rawParts:[], meals:[], section: SECTIONS.indexOf(ing.section)>=0 ? ing.section : 'other', pantryStaple: true, flag: null, substitute: '' };
+          combined[key] = { item: ing.item, unit: ing.unit||'', qtyNum:0, qtyKnown:true, rawParts:[], meals:[], breakdown:[], section: SECTIONS.indexOf(ing.section)>=0 ? ing.section : 'other', pantryStaple: true, flag: null, substitute: '' };
         }
         var c = combined[key];
         if (c.meals.indexOf(m.name) === -1) c.meals.push(m.name);
         if (ing.flag && !c.flag){ c.flag = ing.flag; c.substitute = ing.substitute || ''; }
         if (!ing.pantryStaple) c.pantryStaple = false;
+
         var qn = parseFloat(ing.quantity);
+        var contributionNum = null, contributionRaw = null;
         if (ing.quantity !== '' && ing.quantity != null && !isNaN(qn)){
-          c.qtyNum += qn * scale;
+          contributionNum = qn * scale;
+          c.qtyNum += contributionNum;
         } else {
           c.qtyKnown = false;
-          if (ing.quantity) c.rawParts.push(ing.quantity);
+          if (ing.quantity){ contributionRaw = ing.quantity; c.rawParts.push(ing.quantity); }
+        }
+        // Per-recipe breakdown so a combined line can still show which meal needs how much.
+        var existing = c.breakdown.filter(function(b){ return b.meal === m.name; })[0];
+        if (existing){
+          if (contributionNum != null && existing.num != null) existing.num += contributionNum;
+        } else {
+          c.breakdown.push({ meal: m.name, num: contributionNum, raw: contributionRaw, unit: ing.unit||'' });
         }
       });
     });
@@ -409,6 +421,14 @@
     });
     SECTIONS.forEach(function(s){ bySection[s].sort(function(a,b){ return a.item.localeCompare(b.item); }); });
     return bySection;
+  }
+  function formatBreakdownEntry(b){
+    if (b.num != null){
+      var n = Math.round(b.num*100)/100;
+      return n + (b.unit ? ' '+b.unit : '');
+    }
+    if (b.raw) return b.raw + (b.unit ? ' '+b.unit : '');
+    return b.unit || 'amount varies';
   }
 
   function formatQty(item){
@@ -450,7 +470,10 @@
       if (!items.length) return;
       lines.push('-- '+SECTION_LABELS[s]+' --');
       items.forEach(function(item){
-        var line = item.item+' — '+formatQty(item)+' ('+item.meals.join(', ')+')';
+        var detail = item.meals.length > 1
+          ? item.breakdown.map(function(b){ return formatBreakdownEntry(b)+' for '+b.meal; }).join(', ')
+          : item.meals.join(', ');
+        var line = item.item+' — '+formatQty(item)+' ('+detail+')';
         if (item.flag) line += ' [' + FLAG_LABELS[item.flag] + (item.substitute? ': '+item.substitute:'') + ']';
         lines.push(line);
       });
@@ -680,6 +703,16 @@
     return html;
   }
 
+  function renderMealsLine(item){
+    if (item.meals.length > 1){
+      var lis = item.breakdown.map(function(b){
+        return '<li>'+escapeHtml(formatBreakdownEntry(b))+' for '+escapeHtml(b.meal)+'</li>';
+      }).join('');
+      return '<ul class="breakdown-list">'+lis+'</ul>';
+    }
+    return '<div class="g-meta">for '+escapeHtml(item.meals.join(', '))+(item.waste?' &middot; small amount for one meal, easy to waste':'')+'</div>';
+  }
+
   function renderGrocerySection(picked){
     var bySection = buildGroceryList(picked);
     var checked = (weekDoc && weekDoc.checkedItems) || {};
@@ -707,7 +740,7 @@
         html += '<div class="g-item'+(isChecked?' checked':'')+'">' +
           '<input type="checkbox" data-action="toggleGroceryItem" data-id="'+encodeURIComponent(key)+'"'+(isChecked?' checked':'')+'>' +
           '<div><div class="g-name">'+escapeHtml(item.item)+' &mdash; '+escapeHtml(formatQty(item))+'</div>' +
-          '<div class="g-meta">for '+escapeHtml(item.meals.join(', '))+(item.waste?' &middot; small amount for one meal, easy to waste':'')+'</div>' +
+          renderMealsLine(item) +
           (item.flag ? '<div class="g-flag">'+FLAG_LABELS[item.flag]+(item.substitute? ' — '+escapeHtml(item.substitute) : ' — no solid substitute, decide in the shop')+'</div>' : '') +
           '</div></div>';
       });
@@ -727,7 +760,7 @@
         html += '<div class="g-item'+(isChecked?' checked':'')+'">' +
           '<input type="checkbox" data-action="toggleGroceryItem" data-id="'+encodeURIComponent(key)+'"'+(isChecked?' checked':'')+'>' +
           '<div><div class="g-name">'+escapeHtml(item.item)+' &mdash; '+escapeHtml(formatQty(item))+'</div>' +
-          '<div class="g-meta">for '+escapeHtml(item.meals.join(', '))+'</div>' +
+          renderMealsLine(item) +
           (item.flag ? '<div class="g-flag">'+FLAG_LABELS[item.flag]+(item.substitute? ' — '+escapeHtml(item.substitute) : '')+'</div>' : '') +
           '</div></div>';
       });
