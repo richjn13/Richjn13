@@ -890,6 +890,11 @@
     return 'Something went wrong reading that (' + (e && e.message ? e.message : 'unknown error') + ') — you can still fill in the fields by hand.';
   }
 
+  // Set for exactly one render, by any code that has just changed ui.formDraft
+  // programmatically and needs that to win over what's currently in the inputs.
+  var suppressFormSync = false;
+  function renderFromDraft(){ suppressFormSync = true; render(); }
+
   // ---------- rendering ----------
   // Every render() replaces #app's whole innerHTML (no virtual DOM), which would
   // otherwise yank focus and cursor position out of whatever text field the
@@ -915,7 +920,14 @@
     // rebuilding — a re-render can be triggered by the OTHER person's edit arriving
     // over the shared db, not just a local click, and that must never erase typing
     // that hasn't been explicitly saved yet.
-    if (ui.formOpen && ui.formDraft && document.getElementById('form-overlay')){
+    //
+    // EXCEPT when the caller has just written to formDraft itself. This read can't
+    // tell "the user typed this" from "code just set this", so an AI adjustment,
+    // a removed ingredient row or Mark-cooked-today would be silently reverted by
+    // the stale DOM a moment after being applied. renderFromDraft() suppresses it.
+    var skipSync = suppressFormSync;
+    suppressFormSync = false;
+    if (!skipSync && ui.formOpen && ui.formDraft && document.getElementById('form-overlay')){
       try { syncFormDraftFromDom(); } catch(e){}
     }
 
@@ -1518,13 +1530,13 @@
       syncFormDraftFromDom();
       ui.formDraft.lastCooked = todayIso();
       ui.formDraft.timesCooked = (parseInt(ui.formDraft.timesCooked,10)||0) + 1;
-      render();
+      renderFromDraft();
     },
 
-    addDietRow: function(){ syncFormDraftFromDom(); ui.formDraft.dietFlags.push(newDietFlag()); render(); },
-    removeDietRow: function(el, id){ syncFormDraftFromDom(); ui.formDraft.dietFlags.splice(parseInt(id,10),1); render(); },
-    addIngredientRow: function(){ syncFormDraftFromDom(); ui.formDraft.ingredients.push(newIngredient()); render(); },
-    removeIngredientRow: function(el, id){ syncFormDraftFromDom(); ui.formDraft.ingredients.splice(parseInt(id,10),1); render(); },
+    addDietRow: function(){ syncFormDraftFromDom(); ui.formDraft.dietFlags.push(newDietFlag()); renderFromDraft(); },
+    removeDietRow: function(el, id){ syncFormDraftFromDom(); ui.formDraft.dietFlags.splice(parseInt(id,10),1); renderFromDraft(); },
+    addIngredientRow: function(){ syncFormDraftFromDom(); ui.formDraft.ingredients.push(newIngredient()); renderFromDraft(); },
+    removeIngredientRow: function(el, id){ syncFormDraftFromDom(); ui.formDraft.ingredients.splice(parseInt(id,10),1); renderFromDraft(); },
 
     filterSearch: function(el){ ui.mealsFilter.search = el.value; render(); },
     filterTier: function(el){ ui.mealsFilter.tier = el.value; render(); },
@@ -1734,13 +1746,22 @@
         var result = await sampleFn.json(buildAdjustPrompt(ui.formDraft, instruction));
         if (result.base) ui.formDraft.base = result.base;
         if (result.method) ui.formDraft.method = result.method;
-        if (result.notes != null) ui.formDraft.notes = result.notes;
+        // Append rather than replace: notes are where the household records what
+        // changed last time, and an adjustment shouldn't wipe something they wrote.
+        if (result.notes && String(result.notes).trim()){
+          var incoming = String(result.notes).trim();
+          var existing = String(ui.formDraft.notes || '').trim();
+          if (!existing) ui.formDraft.notes = incoming;
+          else if (existing.indexOf(incoming) === -1) ui.formDraft.notes = existing + '\n\n' + incoming;
+        }
         if (Array.isArray(result.dietFlags)) ui.formDraft.dietFlags = mapDietFlags(result.dietFlags);
         if (Array.isArray(result.ingredients)) ui.formDraft.ingredients = mapIngredients(result.ingredients);
         ui.adjusting = false;
         ui.adjustInstruction = '';
         ui.adjustApplied = true;
-        render();
+        // Must be renderFromDraft: a plain render() would read the untouched
+        // method textarea straight back over what the AI just returned.
+        renderFromDraft();
       } catch(e){
         ui.adjusting = false;
         ui.adjustError = sampleErrorMessage(e);
@@ -1801,7 +1822,7 @@
         if (!target) return;
         target.flag = auto.flag;
         target.substitute = target.substitute || auto.substitute;
-        render();
+        renderFromDraft();
       }
     }
   };
