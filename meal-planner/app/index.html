@@ -1,175 +1,181 @@
 <title>Meal Planner</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:wght@400&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&family=JetBrains+Mono:wght@500;600&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 <style>
-  /* Palette: white ground, olive as the structural/brand colour, terracotta for
-     action, navy for information. Semantic red is kept distinct from terracotta
-     so a warning never reads as a button. */
+  /* Deliberately a single light world: white ground everywhere, no dark variant,
+     so the app looks the same whatever the phone's system theme is set to.
+     Olive is the structural/brand colour, terracotta is action, navy is
+     information. Semantic red stays distinct from terracotta so an allergen
+     warning never reads as a button. */
   :root{
     --paper: #FFFFFF;
     --card: #FFFFFF;
-    --card-2: #F7F8F5;
-    --ink: #1B231E;
-    --ink-soft: #67716A;
-    --line: #E4E8E0;
-    --line-strong: #CFD6CA;
-    --olive: #4A5D3A;
-    --olive-ink: #F4F7F0;
-    --olive-tint: #EDF1E7;
-    --terracotta: #C05F3C;
-    --terracotta-ink: #FFF7F3;
-    --terracotta-tint: #FAEBE4;
-    --navy: #24406B;
-    --navy-ink: #F2F6FC;
-    --navy-tint: #E7EDF6;
-    --danger: #B3261E;
-    --neutral-tint: #F0F1EE;
-    --shadow: 0 1px 2px rgba(27,35,30,0.05);
-    --shadow-lift: 0 10px 30px -12px rgba(27,35,30,0.28);
-    /* Accent aliases kept so existing rules stay honest about their intent. */
+    --card-2: #FFFFFF;
+    --ink: #14191A;
+    --ink-soft: #5E6A63;
+    --line: #E3E7E2;
+    --line-strong: #C7CFC8;
+    --olive: #3F5730;
+    --olive-ink: #FFFFFF;
+    --olive-tint: #EBF0E5;
+    --terracotta: #B4522F;
+    --terracotta-ink: #FFFFFF;
+    --terracotta-tint: #FAE8E1;
+    --navy: #1D3A66;
+    --navy-ink: #FFFFFF;
+    --navy-tint: #E6ECF5;
+    --danger: #A81F16;
+    --neutral-tint: #F1F2F0;
+    --shadow-lift: 0 12px 34px -14px rgba(20,25,26,0.34);
     --accent: var(--terracotta);
     --accent-ink: var(--terracotta-ink);
-    --accent-2: var(--olive);
     --forest: var(--olive);
     --forest-ink: var(--olive-ink);
   }
-  @media (prefers-color-scheme: dark){
-    :root:not([data-theme="light"]){
-      --paper: #131614; --card: #1B1F1C; --card-2: #222722;
-      --ink: #ECEFEA; --ink-soft: #9AA69C; --line: #2E352F; --line-strong: #3C453D;
-      --olive: #9BBB7E; --olive-ink: #16200F; --olive-tint: #24301C;
-      --terracotta: #E08A66; --terracotta-ink: #2A1207; --terracotta-tint: #3A2118;
-      --navy: #8FB0E0; --navy-ink: #0F1A2B; --navy-tint: #1C2839;
-      --danger: #EF9A92; --neutral-tint: #292E2A;
-      --shadow: 0 1px 2px rgba(0,0,0,0.4);
-      --shadow-lift: 0 10px 30px -12px rgba(0,0,0,0.7);
-    }
-  }
-  :root[data-theme="dark"]{
-    --paper: #131614; --card: #1B1F1C; --card-2: #222722;
-    --ink: #ECEFEA; --ink-soft: #9AA69C; --line: #2E352F; --line-strong: #3C453D;
-    --olive: #9BBB7E; --olive-ink: #16200F; --olive-tint: #24301C;
-    --terracotta: #E08A66; --terracotta-ink: #2A1207; --terracotta-tint: #3A2118;
-    --navy: #8FB0E0; --navy-ink: #0F1A2B; --navy-tint: #1C2839;
-    --danger: #EF9A92; --neutral-tint: #292E2A;
-    --shadow: 0 1px 2px rgba(0,0,0,0.4);
-    --shadow-lift: 0 10px 30px -12px rgba(0,0,0,0.7);
-  }
 
   *{box-sizing:border-box;}
-  body{ background:var(--paper); color:var(--ink); font-family:"Manrope", ui-sans-serif, system-ui, sans-serif; line-height:1.5; -webkit-font-smoothing:antialiased; }
-  h1,h2,h3,h4{ text-wrap:balance; margin:0; font-family:"Manrope", ui-sans-serif, system-ui, sans-serif; letter-spacing:-0.015em; }
-  .serif{ font-family:"Instrument Serif", Georgia, serif; letter-spacing:0; }
-  .mono{ font-family:"JetBrains Mono", ui-monospace, monospace; letter-spacing:0.02em; }
-  .wrap{ max-width:1020px; margin:0 auto; padding:28px 18px 88px; }
-  a{color:var(--navy);}
+  body{ background:var(--paper); color:var(--ink);
+    font-family:"Archivo", ui-sans-serif, system-ui, sans-serif; font-weight:500; line-height:1.5;
+    -webkit-font-smoothing:antialiased; }
+  h1,h2,h3,h4{ text-wrap:balance; margin:0; font-family:"Archivo", ui-sans-serif, system-ui, sans-serif;
+    font-weight:800; letter-spacing:-0.02em; }
+  .mono{ font-family:"JetBrains Mono", ui-monospace, monospace; letter-spacing:0.01em; font-weight:600; }
+  .wrap{ max-width:1020px; margin:0 auto; padding:26px 18px 88px; }
+  a{color:var(--navy); font-weight:700;}
   button, input, select, textarea{ font-family:inherit; }
   :focus-visible{ outline:2px solid var(--terracotta); outline-offset:2px; }
   @media (prefers-reduced-motion: reduce){ *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;} }
 
-  .topbar{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; padding-bottom:16px; }
+  .topbar{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; padding-bottom:14px; }
   .brand{display:flex; align-items:baseline; gap:10px;}
-  .brand h1{ font-family:"Instrument Serif", Georgia, serif; font-size:1.85rem; font-weight:400; color:var(--olive); letter-spacing:0; }
-  .brand .tag{font-size:0.64rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--ink-soft);}
+  .brand h1{ font-size:1.75rem; font-weight:900; color:var(--olive); letter-spacing:-0.035em; }
+  .brand .tag{font-size:0.62rem; text-transform:uppercase; letter-spacing:0.14em; font-weight:700; color:var(--ink-soft);}
 
-  .tabs{ display:flex; gap:2px; margin-bottom:24px; border-bottom:1px solid var(--line); }
-  .tab{ background:none; border:none; padding:9px 14px; font-size:0.88rem; font-weight:600; color:var(--ink-soft); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:color 0.12s ease; }
+  .tabs{ display:flex; gap:2px; margin-bottom:22px; border-bottom:2px solid var(--line); overflow-x:auto; }
+  .tab{ background:none; border:none; padding:9px 14px; font-size:0.9rem; font-weight:800; color:var(--ink-soft);
+    cursor:pointer; border-bottom:3px solid transparent; margin-bottom:-2px; white-space:nowrap; letter-spacing:-0.01em; }
   .tab.active{ color:var(--terracotta); border-bottom-color:var(--terracotta); }
   .tab:hover{ color:var(--ink); }
   .tab.active:hover{ color:var(--terracotta); }
 
-  .card{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px; }
+  .card{ background:var(--card); border:1.5px solid var(--line); border-radius:14px; padding:20px; }
   .hero{ text-align:center; display:flex; flex-direction:column; align-items:center; gap:14px; padding:52px 28px; }
-  .hero h2{ font-family:"Instrument Serif", Georgia, serif; font-weight:400; font-size:2rem; max-width:22ch; letter-spacing:0; }
+  .hero h2{ font-size:2rem; font-weight:900; max-width:22ch; letter-spacing:-0.035em; }
   .hero p{max-width:48ch; color:var(--ink-soft); font-size:0.95rem;}
-  .eyebrow{ font-size:0.66rem; text-transform:uppercase; letter-spacing:0.12em; color:var(--olive); font-weight:700; }
+  .eyebrow{ font-size:0.64rem; text-transform:uppercase; letter-spacing:0.16em; color:var(--olive); font-weight:800; }
 
-  .btn{ border:1px solid transparent; border-radius:9px; padding:10px 18px; font-size:0.88rem; font-weight:600; cursor:pointer; transition:background 0.12s ease, border-color 0.12s ease; }
+  .btn{ border:2px solid transparent; border-radius:10px; padding:10px 18px; font-size:0.88rem; font-weight:800;
+    letter-spacing:-0.01em; cursor:pointer; }
   .btn-primary{ background:var(--terracotta); color:var(--terracotta-ink); }
-  .btn-primary:hover{ filter:brightness(1.07); }
+  .btn-primary:hover{ filter:brightness(1.08); }
   .btn-forest{ background:var(--olive); color:var(--olive-ink); }
-  .btn-forest:hover{ filter:brightness(1.07); }
+  .btn-forest:hover{ filter:brightness(1.12); }
   .btn-navy{ background:var(--navy); color:var(--navy-ink); }
-  .btn-ghost{ background:transparent; border-color:var(--line-strong); color:var(--ink); }
+  .btn-ghost{ background:var(--card); border-color:var(--line-strong); color:var(--ink); }
   .btn-ghost:hover{ border-color:var(--olive); color:var(--olive); }
-  .btn-danger{ background:transparent; border-color:var(--danger); color:var(--danger); }
+  .btn-danger{ background:var(--card); border-color:var(--danger); color:var(--danger); }
   .btn-sm{ padding:6px 12px; font-size:0.78rem; border-radius:8px; }
-  .btn-link{ background:none; border:none; color:var(--navy); text-decoration:underline; text-underline-offset:2px; cursor:pointer; padding:0; font-size:0.8rem; }
+  .btn-link{ background:none; border:none; color:var(--navy); text-decoration:underline; text-underline-offset:2px;
+    cursor:pointer; padding:0; font-size:0.8rem; font-weight:700; }
   .btn-link:hover{ color:var(--terracotta); }
-  .btn[disabled]{ opacity:0.45; cursor:default; }
+  .btn[disabled]{ opacity:0.4; cursor:default; }
   .row-actions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
 
   .section-head{ display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
-  .section-head h2{font-size:1.25rem; font-weight:700;}
-  .muted{ color:var(--ink-soft); font-size:0.85rem; }
+  .section-head h2{font-size:1.3rem; font-weight:900; letter-spacing:-0.03em;}
+  .muted{ color:var(--ink-soft); font-size:0.85rem; font-weight:500; }
 
-  .chip{ font-size:0.62rem; text-transform:uppercase; letter-spacing:0.05em; padding:3px 9px; border-radius:999px; font-weight:700; white-space:nowrap; }
+  .chip{ font-size:0.62rem; text-transform:uppercase; letter-spacing:0.06em; padding:3px 9px; border-radius:999px;
+    font-weight:800; white-space:nowrap; }
   .chip.tier-often{ background:var(--olive-tint); color:var(--olive); }
   .chip.tier-sometimes{ background:var(--navy-tint); color:var(--navy); }
   .chip.tier-rarely{ background:var(--terracotta-tint); color:var(--terracotta); }
   .chip.tier-unranked{ background:var(--neutral-tint); color:var(--ink-soft); }
   .chip.flag{ background:var(--terracotta-tint); color:var(--terracotta); }
   .chip.in-week{ background:var(--olive-tint); color:var(--olive); }
-  .rank-label{ font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-soft); font-weight:700; }
-  .tier-select{ font-size:0.74rem; font-weight:600; border:1px solid var(--line-strong); border-radius:7px;
+  .chip.in-pantry{ background:var(--navy-tint); color:var(--navy); }
+  .rank-label{ font-size:0.58rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--ink-soft); font-weight:800; }
+  .tier-select{ font-size:0.74rem; font-weight:700; border:1.5px solid var(--line-strong); border-radius:7px;
     padding:3px 5px; background:var(--card); color:var(--ink); cursor:pointer; max-width:130px; }
   .tier-select:hover, .tier-select:focus{ border-color:var(--olive); }
 
   /* meals list */
   .filters{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
-  .filters select, .filters input[type="search"]{ border:1px solid var(--line-strong); background:var(--card); color:var(--ink); border-radius:9px; padding:8px 11px; font-size:0.82rem; }
+  .filters select, .filters input[type="search"]{ border:1.5px solid var(--line-strong); background:var(--card);
+    color:var(--ink); border-radius:9px; padding:8px 11px; font-size:0.82rem; font-weight:600; }
   .meal-list{ display:flex; flex-direction:column; gap:10px; }
+  .list-divider{ font-size:0.64rem; text-transform:uppercase; letter-spacing:0.14em; font-weight:800;
+    color:var(--ink-soft); padding-top:6px; }
+  .list-divider:first-child{ padding-top:0; }
   .meal-row-wrap{ display:flex; flex-direction:column; gap:8px; }
-  .meal-row{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; transition:border-color 0.12s ease; }
+  .meal-row{ background:var(--card); border:1.5px solid var(--line); border-radius:12px; padding:14px 16px;
+    display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
   .meal-row:hover{ border-color:var(--line-strong); }
-  .meal-row .m-name-btn{ background:none; border:none; padding:0; cursor:pointer; text-align:left; color:var(--ink); font-weight:700; font-size:1.02rem; letter-spacing:-0.01em; }
+  .meal-row .m-name-btn{ background:none; border:none; padding:0; cursor:pointer; text-align:left; color:var(--ink);
+    font-weight:800; font-size:1.05rem; letter-spacing:-0.02em; }
   .meal-row .m-name-btn:hover{ color:var(--terracotta); }
   .meal-row .m-meta{ display:flex; gap:7px; flex-wrap:wrap; align-items:center; margin-top:6px; }
   .meal-row .m-info{ flex:1; min-width:200px; }
   .empty-state{ text-align:center; padding:44px 20px; color:var(--ink-soft); }
-  .meal-detail{ background:var(--card-2); border:1px solid var(--line); border-radius:12px; padding:16px 18px; }
+  .meal-detail{ background:var(--card); border:1.5px solid var(--line-strong); border-radius:12px; padding:16px 18px; }
   .detail-block{ margin-bottom:14px; }
   .detail-block:last-child{ margin-bottom:0; }
-  .detail-block h4{ font-size:0.66rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--ink-soft); margin-bottom:6px; }
+  .detail-block h4{ font-size:0.64rem; text-transform:uppercase; letter-spacing:0.12em; color:var(--ink-soft); margin-bottom:6px; font-weight:800; }
   .detail-text{ white-space:pre-wrap; font-size:0.9rem; }
   .ing-list{ margin:0; padding-left:18px; font-size:0.9rem; }
   .ing-list li{ margin-bottom:6px; }
 
+  /* pantry */
+  .pantry-grid{ display:flex; flex-wrap:wrap; gap:8px; }
+  .pantry-item{ display:inline-flex; align-items:center; gap:6px; background:var(--olive-tint); color:var(--olive);
+    border-radius:999px; padding:6px 8px 6px 13px; font-size:0.84rem; font-weight:700; }
+  .pantry-remove{ background:none; border:none; color:inherit; cursor:pointer; font-size:1rem; line-height:1;
+    padding:0 3px; opacity:0.65; }
+  .pantry-remove:hover{ opacity:1; color:var(--terracotta); }
+  .have-it-btn{ margin-top:5px; font-size:0.74rem; }
+
   /* form */
   .field{ margin-bottom:14px; }
-  .field label, .field-label{ display:block; font-size:0.66rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--ink-soft); font-weight:700; margin-bottom:5px; }
+  .field label, .field-label{ display:block; font-size:0.64rem; text-transform:uppercase; letter-spacing:0.12em;
+    color:var(--ink-soft); font-weight:800; margin-bottom:5px; }
   .field input[type="text"], .field input[type="number"], .field input[type="date"], .field input[type="url"], .field select, .field textarea{
-    width:100%; border:1px solid var(--line-strong); background:var(--card); color:var(--ink); border-radius:9px; padding:10px 11px; font-size:0.9rem;
+    width:100%; border:1.5px solid var(--line-strong); background:var(--card); color:var(--ink); border-radius:9px;
+    padding:10px 11px; font-size:0.9rem; font-weight:600;
   }
-  .field textarea{ min-height:96px; resize:vertical; line-height:1.55; }
+  .field textarea{ min-height:96px; resize:vertical; line-height:1.55; font-weight:500; }
   .grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
   @media (max-width:640px){ .grid-2{ grid-template-columns:1fr; } }
-  fieldset{ border:1px solid var(--line); border-radius:12px; padding:16px; margin:0 0 18px; }
-  legend{ font-size:0.66rem; text-transform:uppercase; letter-spacing:0.1em; font-weight:700; color:var(--ink-soft); padding:0 6px; }
+  fieldset{ border:1.5px solid var(--line); border-radius:12px; padding:16px; margin:0 0 18px; }
+  legend{ font-size:0.64rem; text-transform:uppercase; letter-spacing:0.12em; font-weight:800; color:var(--ink-soft); padding:0 6px; }
   .sub-row{ display:grid; grid-template-columns: 1.4fr 0.7fr 0.7fr 1fr auto 1fr auto; gap:6px; align-items:center; margin-bottom:8px; }
-  .sub-row input, .sub-row select{ border:1px solid var(--line-strong); background:var(--card); color:var(--ink); border-radius:7px; padding:7px 8px; font-size:0.8rem; width:100%; }
+  .sub-row input, .sub-row select{ border:1.5px solid var(--line-strong); background:var(--card); color:var(--ink);
+    border-radius:7px; padding:7px 8px; font-size:0.8rem; width:100%; font-weight:600; }
   @media (max-width:800px){ .sub-row{ grid-template-columns:1fr 1fr; } }
   .diet-row{ display:grid; grid-template-columns:1fr 1fr auto; gap:6px; margin-bottom:8px; }
-  .diet-row input{ border:1px solid var(--line-strong); background:var(--card); color:var(--ink); border-radius:7px; padding:7px 8px; font-size:0.8rem; }
+  .diet-row input{ border:1.5px solid var(--line-strong); background:var(--card); color:var(--ink); border-radius:7px;
+    padding:7px 8px; font-size:0.8rem; font-weight:600; }
   .form-actions{ display:flex; justify-content:space-between; gap:10px; margin-top:18px; flex-wrap:wrap; }
-  .adjust-fieldset{ background:var(--card-2); }
+  .adjust-fieldset{ background:var(--card); border-color:var(--line-strong); }
   .adjust-row{ display:flex; gap:8px; flex-wrap:wrap; }
-  .adjust-row input{ flex:1; min-width:200px; border:1px solid var(--line-strong); background:var(--card); color:var(--ink); border-radius:9px; padding:10px 11px; font-size:0.88rem; }
+  .adjust-row input{ flex:1; min-width:200px; border:1.5px solid var(--line-strong); background:var(--card);
+    color:var(--ink); border-radius:9px; padding:10px 11px; font-size:0.88rem; font-weight:600; }
 
   /* import */
   .drop-note{ font-size:0.8rem; color:var(--ink-soft); margin-top:6px; }
-  input[type="file"]{ font-size:0.82rem; color:var(--ink-soft); }
+  input[type="file"]{ font-size:0.82rem; color:var(--ink-soft); font-weight:600; }
 
   /* overlay / picker */
-  .overlay{ position:fixed; inset:0; background:rgba(20,26,21,0.42); display:flex; align-items:flex-end; justify-content:center; z-index:30; }
+  .overlay{ position:fixed; inset:0; background:rgba(20,25,20,0.38); display:flex; align-items:flex-end; justify-content:center; z-index:30; }
   @media (min-width:640px){ .overlay{ align-items:center; padding:20px; } }
-  .sheet{ background:var(--card); width:100%; max-width:660px; max-height:88vh; overflow-y:auto; border-radius:18px 18px 0 0; padding:22px 22px 28px; box-shadow:var(--shadow-lift); }
+  .sheet{ background:var(--card); width:100%; max-width:660px; max-height:88vh; overflow-y:auto;
+    border-radius:18px 18px 0 0; padding:22px 22px 28px; box-shadow:var(--shadow-lift); }
   @media (min-width:640px){ .sheet{ border-radius:16px; } }
   .sheet-head{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; }
-  .sheet-head h3{ font-size:1.15rem; font-weight:700; }
-  .close-x{ background:none; border:none; color:var(--ink-soft); font-size:1.4rem; line-height:1; cursor:pointer; padding:0 4px; }
+  .sheet-head h3{ font-size:1.2rem; font-weight:900; letter-spacing:-0.03em; }
+  .close-x{ background:none; border:none; color:var(--ink-soft); font-size:1.5rem; line-height:1; cursor:pointer; padding:0 4px; }
   .close-x:hover{ color:var(--terracotta); }
-  .pick-option{ width:100%; display:flex; justify-content:space-between; align-items:center; gap:10px; background:transparent; border:1px solid var(--line); border-radius:10px; padding:11px 13px; cursor:pointer; text-align:left; color:var(--ink); }
+  .pick-option{ width:100%; display:flex; justify-content:space-between; align-items:center; gap:10px; background:var(--card);
+    border:1.5px solid var(--line); border-radius:10px; padding:11px 13px; cursor:pointer; text-align:left; color:var(--ink); font-weight:600; }
   .pick-option:hover{ border-color:var(--olive); background:var(--olive-tint); }
   .pick-row{ margin-bottom:8px; }
   .pick-main{ display:flex; align-items:center; gap:8px; }
@@ -178,32 +184,38 @@
 
   /* week */
   .slots{ display:flex; flex-direction:column; gap:10px; margin-bottom:18px; }
-  .slot{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
-  .slot .m-name{ font-weight:700; font-size:1rem; letter-spacing:-0.01em; }
+  .slot{ background:var(--card); border:1.5px solid var(--line); border-radius:12px; padding:14px 16px; display:flex;
+    justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+  .slot .m-name{ font-weight:800; font-size:1.02rem; letter-spacing:-0.02em; }
   .slot .m-meta{ display:flex; gap:7px; flex-wrap:wrap; align-items:center; margin-top:6px; }
-  .slot-empty-btn{ flex:1; border:1.5px dashed var(--line-strong); border-radius:10px; background:none; color:var(--ink-soft); padding:16px; cursor:pointer; text-align:center; font-size:0.85rem; font-weight:600; }
+  .slot-empty-btn{ flex:1; border:2px dashed var(--line-strong); border-radius:10px; background:none; color:var(--ink-soft);
+    padding:16px; cursor:pointer; text-align:center; font-size:0.85rem; font-weight:800; }
   .slot-empty-btn:hover{ border-color:var(--terracotta); color:var(--terracotta); }
   .loose-note{ font-size:0.82rem; color:var(--ink-soft); text-align:center; margin-bottom:18px; }
-  .warnbox{ border-radius:12px; padding:13px 15px; margin-bottom:14px; font-size:0.85rem; border:1px solid transparent; }
+  .warnbox{ border-radius:12px; padding:13px 15px; margin-bottom:14px; font-size:0.85rem; border:1.5px solid transparent; font-weight:600; }
   .warnbox.warn{ background:var(--terracotta-tint); color:var(--terracotta); border-color:var(--terracotta); }
   .warnbox.info{ background:var(--navy-tint); color:var(--navy); border-color:var(--navy); }
   .warnbox ul{ margin:4px 0 0; padding-left:18px; }
-  .warnbox strong{ color:inherit; }
+  .warnbox strong{ color:inherit; font-weight:800; }
 
   /* grocery */
   .g-section{ margin-bottom:20px; }
-  .g-section h3{ font-size:0.7rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--ink-soft); display:flex; justify-content:space-between; align-items:center; gap:10px; border-bottom:1px solid var(--line); padding-bottom:7px; margin-bottom:8px; }
+  .g-section h3{ font-size:0.68rem; text-transform:uppercase; letter-spacing:0.12em; font-weight:800; color:var(--ink-soft);
+    display:flex; justify-content:space-between; align-items:center; gap:10px; border-bottom:1.5px solid var(--line);
+    padding-bottom:7px; margin-bottom:8px; }
   .g-item{ display:flex; align-items:flex-start; gap:12px; padding:10px 2px; border-bottom:1px solid var(--line); }
   .g-item:last-child{ border-bottom:none; }
   .g-item input[type="checkbox"]{ width:22px; height:22px; margin-top:1px; flex:none; accent-color:var(--olive); }
   .g-item.checked .g-name{ text-decoration:line-through; color:var(--ink-soft); }
-  .g-name{ font-weight:600; font-size:0.92rem; }
+  .g-name{ font-weight:700; font-size:0.94rem; }
   .g-meta{ font-size:0.76rem; color:var(--ink-soft); }
   .breakdown-list{ margin:3px 0 0; padding-left:16px; font-size:0.76rem; color:var(--ink-soft); }
   .breakdown-list li{ margin-bottom:1px; }
-  .g-flag{ font-size:0.76rem; color:var(--danger); margin-top:3px; }
-  .toast{ position:fixed; bottom:22px; left:50%; transform:translateX(-50%); background:var(--olive); color:var(--olive-ink); padding:11px 20px; border-radius:999px; font-size:0.85rem; font-weight:600; box-shadow:var(--shadow-lift); z-index:50; }
-  .copy-fallback textarea{ width:100%; min-height:120px; margin-top:8px; border:1px solid var(--line-strong); border-radius:9px; padding:9px; background:var(--card); color:var(--ink); font-family:"JetBrains Mono", monospace; font-size:0.78rem; }
+  .g-flag{ font-size:0.76rem; color:var(--danger); margin-top:3px; font-weight:700; }
+  .toast{ position:fixed; bottom:22px; left:50%; transform:translateX(-50%); background:var(--olive); color:var(--olive-ink);
+    padding:11px 20px; border-radius:999px; font-size:0.85rem; font-weight:800; box-shadow:var(--shadow-lift); z-index:50; }
+  .copy-fallback textarea{ width:100%; min-height:120px; margin-top:8px; border:1.5px solid var(--line-strong);
+    border-radius:9px; padding:9px; background:var(--card); color:var(--ink); font-family:"JetBrains Mono", monospace; font-size:0.78rem; }
 
   .footnote{ margin-top:30px; text-align:center; font-size:0.75rem; color:var(--ink-soft); }
 </style>
@@ -397,6 +409,7 @@
   var currentTab = 'week';
   var meals = [];
   var weekDoc = null; // { weekStart, mealIds:[], checkedItems:{} }
+  var pantry = []; // things the household already has; matched against grocery items
   var db = null, sampleFn = null, localMode = false, sampleUnavailable = false;
   var dataLoaded = false;
   var ui = {
@@ -417,12 +430,13 @@
     formError: null,
     formSaving: false,
     linkUrl: '', linkDraft: false, linkSaving: false, linkError: null,
+    pantryInput: '', pantrySaving: false,
     toast: null,
     copyFallbackText: null
   };
 
   // ---------- storage: db capability, falls back to localStorage ----------
-  var LS_MEALS = 'mp_meals_v1', LS_WEEK = 'mp_week_v1';
+  var LS_MEALS = 'mp_meals_v1', LS_WEEK = 'mp_week_v1', LS_PANTRY = 'mp_pantry_v1';
   function localGetMeals(){
     try {
       var list = JSON.parse(localStorage.getItem(LS_MEALS)||'[]');
@@ -475,6 +489,35 @@
     localSaveWeek(w);
     return Promise.resolve();
   }
+
+  // ---------- pantry ----------
+  function localGetPantry(){
+    try {
+      var list = JSON.parse(localStorage.getItem(LS_PANTRY)||'[]');
+      return Array.isArray(list) ? list.filter(function(x){ return typeof x === 'string'; }) : [];
+    } catch(e){ return []; }
+  }
+  function savePantry(list){
+    pantry = list;
+    if (db) return db.doc('pantry/current').set({ items: list, updatedAt: Date.now() });
+    localWrite(LS_PANTRY, list);
+    render();
+    return Promise.resolve();
+  }
+  function normalizePantryTerm(s){ return String(s||'').toLowerCase().trim().replace(/\s+/g,' '); }
+  // An ingredient counts as "already have it" when a pantry term matches it as a
+  // whole word — so "oil" covers "olive oil" without "soil" matching anything.
+  function isInPantry(itemName){
+    var n = normalizePantryTerm(itemName);
+    if (!n) return false;
+    for (var i=0;i<pantry.length;i++){
+      var term = normalizePantryTerm(pantry[i]);
+      if (!term) continue;
+      if (n === term) return true;
+      if (matchesKeyword(n, term)) return true;
+    }
+    return false;
+  }
   function updateWeek(partial){
     var cur = weekDoc || { weekStart: mondayIso(), mealIds: [], checkedItems: {} };
     var next = Object.assign({}, cur, partial);
@@ -491,6 +534,7 @@
       localMode = true;
       meals = localGetMeals();
       weekDoc = localGetWeek();
+      pantry = localGetPantry();
       dataLoaded = true;
       render();
       return;
@@ -506,6 +550,11 @@
       dataLoaded = true;
       render();
     }, function(err){ fallBackToLocal(err); });
+    db.doc('pantry/current').onSnapshot(function(snap){
+      var data = snap.exists ? snap.data() : null;
+      pantry = (data && Array.isArray(data.items)) ? data.items.filter(function(x){ return typeof x === 'string'; }) : [];
+      render();
+    }, function(){});
   }
 
   // The shared store died mid-session. `db` MUST be cleared here, not just
@@ -518,6 +567,7 @@
     localMode = true;
     meals = localGetMeals();
     weekDoc = localGetWeek();
+    pantry = localGetPantry();
     dataLoaded = true;
     ui.actionError = 'Lost the shared list' + (err && err.code ? ' ('+err.code+')' : '') +
       ' — still working on this device, but changes won’t sync until you reload.';
@@ -618,6 +668,9 @@
     var bySection = {}; SECTIONS.forEach(function(s){ bySection[s] = []; });
     Object.keys(combined).forEach(function(k){
       var item = combined[k];
+      // Anything the household has told us it already owns is a cupboard check,
+      // never a buy line — whatever the recipe's own pantryStaple flag says.
+      if (isInPantry(item.item)){ item.inPantry = true; item.pantryStaple = true; }
       item.waste = item.meals.length === 1 && !item.pantryStaple;
       bySection[item.section].push(item);
     });
@@ -676,6 +729,7 @@
           ? item.breakdown.map(function(b){ return formatBreakdownEntry(b)+' for '+b.meal; }).join(', ')
           : item.meals.join(', ');
         var line = item.item+' — '+formatQty(item)+' ('+detail+')';
+        if (item.inPantry) line += ' [in pantry]';
         if (item.flag) line += ' [' + flagLabel(item.flag) + (item.substitute? ': '+item.substitute:'') + ']';
         else if (item.substitute) line += ' [note: ' + item.substitute + ']';
         lines.push(line);
@@ -804,12 +858,19 @@
       method: draft.method, notes: draft.notes,
       dietFlags: draft.dietFlags, ingredients: draft.ingredients
     };
-    var schema = '{ "base": string, "method": string, "notes": string, '
+    var schema = '{ "base": string, '
+      + '"method": string (the COMPLETE rewritten method, numbered steps one per line, already reflecting the change), '
+      + '"notes": string, '
       + '"dietFlags": [{"rule": string, "substitute": string}], '
       + '"ingredients": [{"item": string, "quantity": string, "unit": string, '
       + '"section": "produce"|"protein"|"dairy-and-chilled"|"tins-and-dry-goods"|"freezer"|"other", '
       + '"pantryStaple": boolean, "flag": ' + FLAG_ENUM_STR + '|null, "substitute": string} ] }';
     return 'You are adjusting an existing recipe record for a household meal-planning app, based on a requested change.\n\n'
+      + 'CRITICAL: apply the change EVERYWHERE it appears, not just in the ingredient list. Rewrite the method text so '
+      + 'every step matches the adjusted ingredients — if butter becomes oil, no step may still say "melt the butter"; it '
+      + 'should say "heat the oil", and any technique that only made sense for the old ingredient should change with it '
+      + '(quantities, timings and wording included). Re-read your own method before answering and confirm the replaced '
+      + 'ingredient appears nowhere in it. The same goes for scaling: change the numbers in the steps, not only the list.\n\n'
       + HOUSEHOLD_RULES_TEXT + ' Respect these unless the requested change itself deliberately overrides one.\n\n'
       + 'Current recipe (JSON):\n' + JSON.stringify(current, null, 2) + '\n\n'
       + 'Requested change: ' + instruction + '\n\n'
@@ -872,6 +933,7 @@
       }
       if (currentTab === 'week') html += renderWeekTab();
       else if (currentTab === 'meals') html += renderMealsTab();
+      else if (currentTab === 'pantry') html += renderPantryTab();
       else if (currentTab === 'import') html += renderImportTab();
 
       if (ui.formOpen) html += renderMealFormOverlay();
@@ -903,7 +965,7 @@
     return '' +
       '<div class="topbar"><div class="brand"><h1>Meal Planner</h1><span class="tag mono">household kitchen ops</span></div></div>' +
       '<div class="tabs">' +
-        tabBtn('week','This Week') + tabBtn('meals','Meals') + tabBtn('import','Import') +
+        tabBtn('week','This Week') + tabBtn('meals','Meals') + tabBtn('pantry','Pantry') + tabBtn('import','Import') +
       '</div>' +
       (ui.actionError
         ? '<div class="warnbox warn" style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">' +
@@ -1034,6 +1096,7 @@
           renderMealsLine(item) +
           (item.flag ? '<div class="g-flag">'+escapeHtml(flagLabel(item.flag))+(item.substitute? ' — '+escapeHtml(item.substitute) : ' — no solid substitute, decide in the shop')+'</div>'
             : (item.substitute ? '<div class="g-meta">Note: '+escapeHtml(item.substitute)+'</div>' : '')) +
+          '<button type="button" class="btn-link have-it-btn" data-action="addGroceryItemToPantry" data-id="'+encodeURIComponent(item.item)+'">I already have this</button>' +
           '</div></div>';
       });
       html += '</div>';
@@ -1041,7 +1104,7 @@
     html += '</div>';
 
     html += '<div class="card" style="margin-top:14px;"><h3 style="margin-bottom:10px;">Check the cupboard first</h3>';
-    if (!hasCupboard) html += '<div class="muted">Nothing marked as a pantry staple this week.</div>';
+    if (!hasCupboard) html += '<div class="muted">Nothing to check &mdash; add staples on the Pantry tab and they’ll land here instead of the buy list.</div>';
     SECTIONS.forEach(function(s){
       var items = bySection[s].filter(function(i){ return i.pantryStaple; });
       if (!items.length) return;
@@ -1051,7 +1114,8 @@
         var isChecked = !!checked[key];
         html += '<div class="g-item'+(isChecked?' checked':'')+'">' +
           '<input type="checkbox" data-action="toggleGroceryItem" data-id="'+encodeURIComponent(key)+'"'+(isChecked?' checked':'')+'>' +
-          '<div><div class="g-name">'+escapeHtml(item.item)+' &mdash; '+escapeHtml(formatQty(item))+'</div>' +
+          '<div><div class="g-name">'+escapeHtml(item.item)+' &mdash; '+escapeHtml(formatQty(item)) +
+            (item.inPantry ? ' <span class="chip in-pantry">In pantry</span>' : '') + '</div>' +
           renderMealsLine(item) +
           (item.flag ? '<div class="g-flag">'+escapeHtml(flagLabel(item.flag))+(item.substitute? ' — '+escapeHtml(item.substitute) : '')+'</div>'
             : (item.substitute ? '<div class="g-meta">Note: '+escapeHtml(item.substitute)+'</div>' : '')) +
@@ -1075,6 +1139,13 @@
       if (f.sort === 'lastCooked') return daysSince(a.lastCooked) - daysSince(b.lastCooked);
       return (a.name||'').localeCompare(b.name||'');
     });
+    // Whatever's in this week floats to the top, in week-slot order, with the
+    // chosen sort still governing everything below it.
+    var weekOrder = getWeekIds();
+    var inWeekList = [], restList = [];
+    list.forEach(function(m){ (weekOrder.indexOf(m.id) !== -1 ? inWeekList : restList).push(m); });
+    inWeekList.sort(function(a,b){ return weekOrder.indexOf(a.id) - weekOrder.indexOf(b.id); });
+    list = inWeekList.concat(restList);
 
     var html = '<div class="section-head"><h2>Meals ('+meals.length+')</h2><button class="btn btn-primary btn-sm" data-action="addMeal">+ Add meal</button></div>';
     html += '<div class="filters">' +
@@ -1090,7 +1161,16 @@
     html += '<div class="meal-list">';
     var currentWeekIds = getWeekIds();
     var weekFull = currentWeekIds.indexOf(null) === -1;
+    var groupHeadingDone = { week:false, rest:false };
     list.forEach(function(m){
+      var rowInWeek = currentWeekIds.indexOf(m.id) !== -1;
+      if (rowInWeek && !groupHeadingDone.week){
+        groupHeadingDone.week = true;
+        html += '<div class="list-divider">In this week</div>';
+      } else if (!rowInWeek && !groupHeadingDone.rest && groupHeadingDone.week){
+        groupHeadingDone.rest = true;
+        html += '<div class="list-divider">Everything else</div>';
+      }
       // One meal with an unexpected shape (a bad AI response, a hand-edited
       // record) shouldn't hide every other meal in the list — isolate it here
       // instead of letting it reach the render() top-level boundary.
@@ -1174,6 +1254,33 @@
       html += '<div class="detail-block"><a href="'+escapeHtml(m.sourceUrl)+'" target="_blank" rel="noopener noreferrer" class="btn-link">Original source</a></div>';
     }
     html += '</div>';
+    return html;
+  }
+
+  // ---- Pantry tab ----
+  function renderPantryTab(){
+    var sorted = pantry.slice().sort(function(a,b){ return String(a).localeCompare(String(b)); });
+    var html = '<div class="section-head"><h2>Pantry ('+pantry.length+')</h2></div>';
+    html += '<div class="card" style="margin-bottom:16px;">' +
+      '<label class="field-label" for="pantry-input">What do you already have?</label>' +
+      '<p class="muted" style="margin-bottom:10px;">Anything listed here is treated as already in the house. On the grocery list it moves out of “To buy” into “Check the cupboard first” and gets marked as pantry, so you don’t buy olive oil for the fourth time.</p>' +
+      '<div class="adjust-row">' +
+        '<input type="text" id="pantry-input" data-action="pantryInput" placeholder="e.g. olive oil, salt, tinned tomatoes" value="'+escapeHtml(ui.pantryInput)+'">' +
+        '<button type="button" class="btn btn-forest btn-sm" data-action="addPantryItem"'+(!ui.pantryInput.trim()?' disabled':'')+'>Add</button>' +
+      '</div>' +
+      '<p class="muted" style="margin-top:8px;font-size:0.78rem;">Separate several with commas to add them all at once.</p>' +
+    '</div>';
+
+    if (!sorted.length){
+      html += '<div class="empty-state">Nothing in the pantry yet. Add the staples you always keep — oil, salt, stock, rice — and they’ll stop showing up on the buy list.</div>';
+      return html;
+    }
+    html += '<div class="card"><div class="pantry-grid">';
+    sorted.forEach(function(item){
+      html += '<span class="pantry-item">'+escapeHtml(item) +
+        '<button type="button" class="pantry-remove" data-action="removePantryItem" data-id="'+escapeHtml(item)+'" title="Remove">&times;</button></span>';
+    });
+    html += '</div></div>';
     return html;
   }
 
@@ -1487,6 +1594,39 @@
 
     importTextInput: function(el){ ui.importRawText = el.value; },
     importUrlInput: function(el){ ui.importSourceUrl = el.value; },
+    pantryInput: function(el){ ui.pantryInput = el.value; },
+    addPantryItem: function(){
+      var raw = (ui.pantryInput || '').trim();
+      if (!raw) return;
+      var additions = raw.split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+      var next = pantry.slice();
+      additions.forEach(function(item){
+        var exists = next.some(function(p){ return normalizePantryTerm(p) === normalizePantryTerm(item); });
+        if (!exists) next.push(item);
+      });
+      ui.pantryInput = '';
+      return savePantry(next).then(function(){
+        ui.toast = additions.length > 1 ? 'Added '+additions.length+' to the pantry' : 'Added to the pantry';
+        render();
+        setTimeout(function(){ ui.toast = null; render(); }, 1600);
+      }).catch(reportActionError);
+    },
+    removePantryItem: function(el, id){
+      var next = pantry.filter(function(p){ return normalizePantryTerm(p) !== normalizePantryTerm(id); });
+      return savePantry(next).then(render).catch(reportActionError);
+    },
+    // From a grocery row: "we've already got this" without leaving the list.
+    addGroceryItemToPantry: function(el, id){
+      var item = decodeURIComponent(id || '');
+      if (!item) return;
+      var exists = pantry.some(function(p){ return normalizePantryTerm(p) === normalizePantryTerm(item); });
+      if (exists) return;
+      return savePantry(pantry.concat([item])).then(function(){
+        ui.toast = '“'+item+'” moved to the pantry';
+        render();
+        setTimeout(function(){ ui.toast = null; render(); }, 1800);
+      }).catch(reportActionError);
+    },
     linkUrlInput: function(el){ ui.linkUrl = el.value; },
     linkDraftToggle: function(el){ ui.linkDraft = !!el.checked; },
     addFromLink: async function(){
@@ -1671,7 +1811,7 @@
   // interaction — double-toggling a checkbox back to its old value, or tearing a
   // text input out of the DOM mid-focus when its container re-renders).
   var CHANGE_ACTIONS = { pdfFile:1, filterTier:1, filterSort:1, weekPickerTier:1, toggleGroceryItem:1, setMealTier:1, linkDraftToggle:1 };
-  var LIVE_INPUT_ACTIONS = { importTextInput:1, importUrlInput:1, filterSearch:1, weekPickerSearch:1, linkUrlInput:1 };
+  var LIVE_INPUT_ACTIONS = { importTextInput:1, importUrlInput:1, filterSearch:1, weekPickerSearch:1, linkUrlInput:1, pantryInput:1 };
 
   // Every handler runs through here. A throw inside one used to leave the action
   // half-done with no re-render — the app just stopped responding, with the real
