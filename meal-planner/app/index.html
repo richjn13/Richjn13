@@ -455,6 +455,7 @@
         };
       }) : [],
       macros: normalizeMacros(raw.macros),
+      macrosSource: raw.macrosSource === 'estimate' ? 'estimate' : (raw.macrosSource === 'entered' ? 'entered' : ''),
       lastCooked: typeof raw.lastCooked === 'string' ? raw.lastCooked : '',
       timesCooked: raw.timesCooked || 0,
       createdAt: raw.createdAt, updatedAt: raw.updatedAt
@@ -487,6 +488,7 @@
     formSaving: false,
     linkUrl: '', linkDraft: false, linkSaving: false, linkError: null,
     pantryInput: '', pantrySaving: false, pantryChecking: false, pantryCheckNote: null,
+    macroEstimating: null, macroError: null, macroErrorId: null, macroBulk: null,
     toast: null,
     copyFallbackText: null
   };
@@ -965,6 +967,7 @@
     m.dietFlags = mapDietFlags(draft.dietFlags);
     m.ingredients = mapIngredients(draft.ingredients);
     m.macros = normalizeMacros(draft.macros);
+    m.macrosSource = draft.macrosSource || (hasMacros({macros:m.macros}) ? 'estimate' : '');
     return m;
   }
 
@@ -1014,6 +1017,43 @@
       + 'pantry match only when you are confident:\n'
       + '{ "duplicates": [ { "name": "<plain shopping name>", "entries": ["<exact entry>", "<exact entry>"] } ], '
       + '"matches": [ { "item": "<exact entry>", "pantry": "<the staple that covers it>" } ] }';
+  }
+
+  // Estimating macros for a meal that has none. Deliberately asks for a
+  // per-serving figure and nothing else: the batch and weekly numbers are
+  // derived from it, so a model that answered "for the whole tray" would throw
+  // every total in the app out by a factor of the serving count.
+  function buildMacroPrompt(m){
+    var recipe = {
+      name: m.name, base: m.base, servings: parseFloat(m.servings) || 4,
+      ingredients: (m.ingredients || []).map(function(i){
+        return { item: i.item, quantity: i.quantity, unit: i.unit };
+      }),
+      method: m.method
+    };
+    return 'Estimate the nutrition for one serving of this home-cooked recipe.\n\n'
+      + 'The recipe makes ' + recipe.servings + ' servings. Work out the totals for the whole batch from the '
+      + 'ingredient quantities, then DIVIDE BY ' + recipe.servings + ' and report the per-serving figures only.\n\n'
+      + 'Use ordinary reference values for the ingredients. Where a quantity is vague ("a drizzle", "to taste"), '
+      + 'assume a normal domestic amount. Round to whole numbers.\n\n'
+      + 'Recipe (JSON):\n' + JSON.stringify(recipe, null, 2) + '\n\n'
+      + 'Reply with ONLY this JSON, and omit any value you genuinely cannot estimate:\n'
+      + '{ "calories": number, "protein": number, "carbs": number, "fat": number }';
+  }
+
+  function mealsMissingMacros(){
+    return meals.filter(function(m){ return !hasMacros(m) && (m.ingredients || []).length > 0; });
+  }
+
+  // Returns true if it actually wrote something. Rejections are left to the
+  // caller so a single failure and a batch failure can be reported differently.
+  async function estimateMacrosFor(m){
+    var result = await sampleFn.json(buildMacroPrompt(m));
+    var next = normalizeMacros(result);
+    if (!hasMacros({ macros: next })) return false;
+    var updated = Object.assign({}, m, { macros: next, macrosSource: 'estimate' });
+    await saveMeal(updated);
+    return true;
   }
 
   function buildAdjustPrompt(draft, instruction){
@@ -1252,7 +1292,11 @@
   // you're deciding whether the week looks heavy.
   function renderWeekMacros(picked){
     var withMacros = picked.filter(hasMacros);
-    if (!withMacros.length) return '';
+    if (!withMacros.length){
+      if (!picked.length) return '';
+      return '<div class="card macro-week"><h3>Macros this week</h3>' +
+        '<p class="muted">None of this week’s picks have macros filled in yet. Open a meal on the Meals tab to add or estimate them.</p></div>';
+    }
     var totals = {}, servingCount = 0;
     MACRO_KEYS.forEach(function(k){ totals[k] = null; });
     withMacros.forEach(function(m){
@@ -1373,6 +1417,21 @@
     list = inWeekList.concat(restList);
 
     var html = '<div class="section-head"><h2>Meals ('+meals.length+')</h2><button class="btn btn-primary btn-sm" data-action="addMeal">+ Add meal</button></div>';
+    // Most meals here were added before macros existed, so the useful offer is
+    // "fill in the gap for all of them", not "go and do it one by one".
+    var missing = mealsMissingMacros();
+    if (ui.macroBulk){
+      html += '<div class="warnbox info">Estimating macros… '+ui.macroBulk.done+' of '+ui.macroBulk.total+' done.</div>';
+    } else if (missing.length && sampleFn && !sampleUnavailable){
+      html += '<div class="warnbox info">' +
+        '<strong>'+missing.length+' meal'+(missing.length===1?' has':'s have')+' no macros yet.</strong> ' +
+        'Open a meal to see them, or estimate the lot from their ingredients. ' +
+        '<button type="button" class="btn btn-navy btn-sm" style="margin-top:8px;" data-action="estimateAllMacros">Estimate all '+missing.length+'</button>' +
+      '</div>';
+    }
+    if (ui.macroError && !ui.macroErrorId){
+      html += '<div class="warnbox warn">'+escapeHtml(ui.macroError)+'</div>';
+    }
     html += '<div class="filters">' +
       '<input type="search" id="meals-search-input" placeholder="Search name or base" value="'+escapeHtml(f.search)+'" data-action="filterSearch">' +
       '<select data-action="filterTier"><option value="">All tiers</option>' + TIERS.map(function(t){ return '<option value="'+t+'"'+(f.tier===t?' selected':'')+'>'+TIER_LABELS[t]+'</option>'; }).join('') + '</select>' +
@@ -1453,6 +1512,39 @@
     return html;
   }
 
+  function renderMealMacros(m){
+    var servings = parseFloat(m.servings) || 4;
+    var busy = ui.macroEstimating === m.id || ui.macroBulk;
+    var canEstimate = !!sampleFn && !sampleUnavailable && (m.ingredients || []).length > 0;
+    var html = '<div class="detail-block"><h4>Macros</h4>';
+    if (hasMacros(m)){
+      html += '<div class="macro-readout">' +
+          '<div><span class="macro-scope">Per serving</span> '+escapeHtml(macroSummary(m,'per'))+'</div>' +
+          '<div><span class="macro-scope">All '+servings+' servings</span> '+escapeHtml(macroSummary(m,'total'))+'</div>' +
+        '</div>';
+      if (m.macrosSource === 'estimate'){
+        html += '<div class="g-meta" style="margin-top:8px;">Estimated from the ingredients, not measured — treat it as a ballpark. Edit the meal to correct it.</div>';
+      }
+      if (canEstimate){
+        html += '<div style="margin-top:10px;"><button type="button" class="btn-link" data-action="estimateMacros" data-id="'+m.id+'"'+(busy?' disabled':'')+'>'+(ui.macroEstimating===m.id?'Estimating…':'Re-estimate with AI')+'</button></div>';
+      }
+    } else {
+      html += '<p class="muted">Nothing filled in yet.</p>';
+      if (canEstimate){
+        html += '<div style="margin-top:8px;"><button type="button" class="btn btn-navy btn-sm" data-action="estimateMacros" data-id="'+m.id+'"'+(busy?' disabled':'')+'>'+(ui.macroEstimating===m.id?'Estimating…':'Estimate with AI')+'</button>' +
+          '<span class="muted" style="margin-left:10px;font-size:0.8rem;">or type them in on the edit screen</span></div>';
+      } else if (!(m.ingredients || []).length){
+        html += '<p class="muted" style="font-size:0.8rem;">Add the ingredients first and they can be estimated from those.</p>';
+      } else {
+        html += '<p class="muted" style="font-size:0.8rem;">Add them on the edit screen — AI estimating isn’t available in this view.</p>';
+      }
+    }
+    if (ui.macroError && ui.macroErrorId === m.id){
+      html += '<div class="warnbox warn" style="margin-top:8px;">'+escapeHtml(ui.macroError)+'</div>';
+    }
+    return html + '</div>';
+  }
+
   function renderMealDetail(m){
     var html = '<div class="meal-detail">';
     html += '<div class="detail-block"><h4>Method</h4>' +
@@ -1473,14 +1565,10 @@
       html += '<p class="muted">No ingredients listed yet — edit this meal to add them.</p>';
     }
     html += '</div>';
-    if (hasMacros(m)){
-      var servings = parseFloat(m.servings) || 4;
-      html += '<div class="detail-block"><h4>Macros</h4>' +
-        '<div class="macro-readout">' +
-          '<div><span class="macro-scope">Per serving</span> '+escapeHtml(macroSummary(m,'per'))+'</div>' +
-          '<div><span class="macro-scope">All '+servings+' servings</span> '+escapeHtml(macroSummary(m,'total'))+'</div>' +
-        '</div></div>';
-    }
+    // Always rendered, even with nothing filled in: an empty section that says
+    // so and offers to estimate is far more useful than no section at all —
+    // silence just looks like the app doesn't do macros.
+    html += renderMealMacros(m);
     if (m.notes){
       html += '<div class="detail-block"><h4>Notes</h4><div class="detail-text muted">'+escapeHtml(m.notes)+'</div></div>';
     }
@@ -1580,6 +1668,10 @@
         }).join('') +
       '</div>' +
       '<div class="macro-total">'+totalLine+'</div>' +
+      ((sampleFn && !sampleUnavailable && (d.ingredients || []).length)
+        ? '<div style="margin-top:8px;"><button type="button" class="btn btn-ghost btn-sm" data-action="estimateFormMacros"'+(ui.macroEstimating==='form'?' disabled':'')+'>'+(ui.macroEstimating==='form'?'Estimating…':(hasMacros(d)?'Re-estimate from ingredients':'Estimate from ingredients'))+'</button></div>'
+        : '') +
+      (d.macrosSource === 'estimate' && hasMacros(d) ? '<div class="g-meta" style="margin-top:6px;">These are an AI estimate — overwrite anything that looks wrong.</div>' : '') +
     '</fieldset>';
   }
 
@@ -1724,6 +1816,13 @@
       var n = parseFloat(v);
       macros[k] = (v === '' || isNaN(n) || n < 0) ? '' : Math.round(n*10)/10;
     });
+    // A number typed by hand outranks an AI estimate, and stops being labelled
+    // as one. Anything the AI writes goes through renderFromDraft, so by the
+    // time we read the DOM again a difference here can only be a person typing.
+    var macrosChanged = MACRO_KEYS.some(function(k){
+      return String(macros[k]) !== String((d.macros && d.macros[k] != null) ? d.macros[k] : '');
+    });
+    if (macrosChanged) d.macrosSource = 'entered';
     d.macros = macros;
     var adjEl = document.getElementById('adjust-instruction');
     if (adjEl) ui.adjustInstruction = adjEl.value;
@@ -1877,6 +1976,80 @@
     removePantryItem: function(el, id){
       var next = pantry.filter(function(p){ return normalizePantryTerm(p) !== normalizePantryTerm(id); });
       return savePantry(next).then(render).catch(reportActionError);
+    },
+    // Estimating macros writes straight to the saved meal rather than opening
+    // the form: the point is to see a number on a meal you already have, not to
+    // start an edit you then have to remember to save.
+    estimateFormMacros: async function(){
+      if (!sampleFn || !ui.formDraft || ui.macroEstimating) return;
+      syncFormDraftFromDom();
+      ui.macroEstimating = 'form'; ui.adjustError = null; renderFromDraft();
+      try {
+        var result = await sampleFn.json(buildMacroPrompt(ui.formDraft));
+        var next = normalizeMacros(result);
+        ui.macroEstimating = null;
+        if (!hasMacros({ macros: next })){
+          ui.adjustError = 'Couldn’t estimate the macros from these ingredients — fill them in by hand.';
+        } else {
+          ui.formDraft.macros = next;
+          ui.formDraft.macrosSource = 'estimate';
+        }
+        renderFromDraft();
+      } catch(e){
+        ui.macroEstimating = null;
+        ui.adjustError = sampleErrorMessage(e) || 'Couldn’t estimate the macros just now.';
+        renderFromDraft();
+      }
+    },
+    estimateMacros: async function(el, id){
+      var m = meals.filter(function(x){ return x.id === id; })[0];
+      if (!m || !sampleFn || ui.macroEstimating || ui.macroBulk) return;
+      ui.macroEstimating = id; ui.macroError = null; ui.macroErrorId = null; render();
+      try {
+        var got = await estimateMacrosFor(m);
+        ui.macroEstimating = null;
+        if (!got){
+          ui.macroError = 'Couldn’t estimate this one — the answer came back empty. Try again, or type the numbers in on the edit screen.';
+          ui.macroErrorId = id;
+          render();
+          return;
+        }
+        render();
+      } catch(e){
+        ui.macroEstimating = null;
+        ui.macroError = sampleErrorMessage(e) || 'Couldn’t estimate that just now.';
+        ui.macroErrorId = id;
+        render();
+      }
+    },
+    // One at a time on purpose. Firing twenty requests at once is the fastest
+    // way to get rate-limited halfway through and leave the list half-filled.
+    estimateAllMacros: async function(){
+      if (!sampleFn || ui.macroBulk || ui.macroEstimating) return;
+      var todo = mealsMissingMacros();
+      if (!todo.length) return;
+      ui.macroError = null; ui.macroErrorId = null;
+      ui.macroBulk = { done: 0, total: todo.length, failed: 0 };
+      render();
+      for (var i = 0; i < todo.length; i++){
+        try {
+          var got = await estimateMacrosFor(todo[i]);
+          if (!got) ui.macroBulk.failed++;
+        } catch(e){
+          ui.macroBulk.failed++;
+          // A capability that has gone away won't come back on the next loop.
+          if (sampleErrorMessage(e) && sampleUnavailable) break;
+        }
+        ui.macroBulk.done++;
+        render();
+      }
+      var failed = ui.macroBulk.failed, total = ui.macroBulk.total;
+      ui.macroBulk = null;
+      ui.toast = failed
+        ? 'Estimated ' + (total - failed) + ' of ' + total + ' — the rest need doing by hand'
+        : 'Estimated macros for ' + total + ' meal' + (total === 1 ? '' : 's');
+      render();
+      setTimeout(function(){ ui.toast = null; render(); }, 2600);
     },
     checkPantryWithAi: async function(){
       // Runs with an empty pantry too — merging duplicates is worth it on its own.
@@ -2077,6 +2250,7 @@
           var newMacros = normalizeMacros(result.macros);
           // Only overwrite a figure the model actually returned, so an estimate
           // it skipped doesn't wipe one that was filled in by hand.
+          ui.formDraft.macrosSource = 'estimate';
           MACRO_KEYS.forEach(function(k){
             if (newMacros[k] !== '') ui.formDraft.macros[k] = newMacros[k];
           });
