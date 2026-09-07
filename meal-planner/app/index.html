@@ -155,6 +155,15 @@
   .diet-row input{ border:1.5px solid var(--line-strong); background:var(--card); color:var(--ink); border-radius:7px;
     padding:7px 8px; font-size:0.8rem; font-weight:600; }
   .form-actions{ display:flex; justify-content:space-between; gap:10px; margin-top:18px; flex-wrap:wrap; }
+  .macro-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  @media (max-width:560px){ .macro-grid{ grid-template-columns:repeat(2,1fr); } }
+  .macro-total{ margin-top:10px; font-size:0.8rem; color:var(--ink-soft); font-weight:600; }
+  .macro-readout{ display:flex; flex-direction:column; gap:5px; font-size:0.88rem; font-weight:600; }
+  .macro-scope{ display:inline-block; min-width:8.5em; font-size:0.62rem; text-transform:uppercase;
+    letter-spacing:0.1em; color:var(--ink-soft); font-weight:800; }
+  .macro-week{ margin-bottom:16px; }
+  .macro-week h3{ font-size:0.68rem; text-transform:uppercase; letter-spacing:0.12em; color:var(--ink-soft);
+    font-weight:800; margin-bottom:8px; }
   .adjust-fieldset{ background:var(--card); border-color:var(--line-strong); }
   .adjust-row{ display:flex; gap:8px; flex-wrap:wrap; }
   .adjust-row input{ flex:1; min-width:200px; border:1.5px solid var(--line-strong); background:var(--card);
@@ -365,8 +374,48 @@
     d.setDate(d.getDate()+diff); d.setHours(0,0,0,0);
     return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   }
+  // Macros are stored PER SERVING, the way a recipe or a label states them; the
+  // whole-batch figure is derived from `servings` so the two can never drift.
+  var MACRO_KEYS = ['calories','protein','carbs','fat'];
+  var MACRO_LABELS = { calories:'Calories', protein:'Protein', carbs:'Carbs', fat:'Fat' };
+  var MACRO_UNITS = { calories:'kcal', protein:'g', carbs:'g', fat:'g' };
+  function blankMacros(){ return { calories:'', protein:'', carbs:'', fat:'' }; }
+  function normalizeMacros(raw){
+    raw = raw || {};
+    var out = blankMacros();
+    MACRO_KEYS.forEach(function(k){
+      var v = raw[k];
+      if (v === '' || v == null) return;
+      var n = parseFloat(v);
+      if (!isNaN(n) && n >= 0) out[k] = Math.round(n*10)/10;
+    });
+    return out;
+  }
+  function hasMacros(m){
+    return !!(m && m.macros) && MACRO_KEYS.some(function(k){ return m.macros[k] !== '' && m.macros[k] != null; });
+  }
+  function macroPerServing(m, key){
+    var v = m && m.macros ? m.macros[key] : '';
+    return (v === '' || v == null) ? null : v;
+  }
+  function macroTotal(m, key){
+    var per = macroPerServing(m, key);
+    if (per == null) return null;
+    return Math.round(per * (parseFloat(m.servings) || 4) * 10) / 10;
+  }
+  // "520 kcal · 32g protein · 45g carbs · 18g fat", skipping anything unfilled.
+  function macroSummary(m, which){
+    var parts = [];
+    MACRO_KEYS.forEach(function(k){
+      var v = which === 'total' ? macroTotal(m, k) : macroPerServing(m, k);
+      if (v == null) return;
+      parts.push(k === 'calories' ? v + ' kcal' : v + MACRO_UNITS[k] + ' ' + MACRO_LABELS[k].toLowerCase());
+    });
+    return parts.join(' · ');
+  }
+
   function blankMeal(){
-    return { id:null, name:'', base:'', effort:'', effortMinutes:'', tier:'unranked', servings:4, method:'', notes:'', sourceUrl:'', dietFlags:[], ingredients:[], lastCooked:'', timesCooked:0 };
+    return { id:null, name:'', base:'', effort:'', effortMinutes:'', tier:'unranked', servings:4, method:'', notes:'', sourceUrl:'', dietFlags:[], ingredients:[], macros:blankMacros(), lastCooked:'', timesCooked:0 };
   }
   function newIngredient(){ return { item:'', quantity:'', unit:'', section:'other', pantryStaple:false, flag:null, substitute:'' }; }
   function newDietFlag(){ return { rule:'', substitute:'' }; }
@@ -405,6 +454,7 @@
           substitute: typeof i.substitute === 'string' ? i.substitute : ''
         };
       }) : [],
+      macros: normalizeMacros(raw.macros),
       lastCooked: typeof raw.lastCooked === 'string' ? raw.lastCooked : '',
       timesCooked: raw.timesCooked || 0,
       createdAt: raw.createdAt, updatedAt: raw.updatedAt
@@ -857,6 +907,7 @@
       + ' "effortMinutes": number (best-guess total active+cook minutes),\n'
       + ' "servings": number (as written, or 4 if unclear),\n'
       + ' "method": string (numbered steps, one per line, in plain everyday language),\n'
+      + ' "macros": {"calories": number, "protein": number, "carbs": number, "fat": number} — PER SERVING, your best estimate from the ingredients; omit a value you cannot reasonably estimate,\n'
       + ' "dietFlags": [{"rule": string, "substitute": string}] for any of the household rules this dish breaks as written,\n'
       + ' "ingredients": [{"item": string, "quantity": string, "unit": string, "section": "produce"|"protein"|"dairy-and-chilled"|"tins-and-dry-goods"|"freezer"|"other", "pantryStaple": boolean, "flag": ' + FLAG_ENUM_STR + '|null, "substitute": string}]\n'
       + '}';
@@ -913,6 +964,7 @@
     m.sourceUrl = sourceUrl || '';
     m.dietFlags = mapDietFlags(draft.dietFlags);
     m.ingredients = mapIngredients(draft.ingredients);
+    m.macros = normalizeMacros(draft.macros);
     return m;
   }
 
@@ -973,11 +1025,14 @@
     var schema = '{ "base": string, '
       + '"method": string (the COMPLETE rewritten method, numbered steps one per line, already reflecting the change), '
       + '"notes": string, '
+      + '"macros": {"calories": number, "protein": number, "carbs": number, "fat": number} (PER SERVING, re-estimated for the adjusted recipe), '
       + '"dietFlags": [{"rule": string, "substitute": string}], '
       + '"ingredients": [{"item": string, "quantity": string, "unit": string, '
       + '"section": "produce"|"protein"|"dairy-and-chilled"|"tins-and-dry-goods"|"freezer"|"other", '
       + '"pantryStaple": boolean, "flag": ' + FLAG_ENUM_STR + '|null, "substitute": string} ] }';
     return 'You are adjusting an existing recipe record for a household meal-planning app, based on a requested change.\n\n'
+      + 'Re-estimate the per-serving macros for the adjusted recipe — swapping butter for oil, or doubling a batch, '
+      + 'changes them.\n\n'
       + 'CRITICAL: apply the change EVERYWHERE it appears, not just in the ingredient list. Rewrite the method text so '
       + 'every step matches the adjusted ingredients — if butter becomes oil, no step may still say "melt the butter"; it '
       + 'should say "heat the oil", and any technique that only made sense for the old ingredient should change with it '
@@ -1166,6 +1221,7 @@
     }
     html += '</div>';
     html += '<div class="loose-note">Five dinners planned &mdash; that leaves 2 nights open, on purpose.</div>';
+    html += renderWeekMacros(picked);
 
     if (rules.warnings.length){
       html += '<div class="warnbox warn"><strong>Worth a look:</strong><ul>' + rules.warnings.map(function(w){ return '<li>'+w+'</li>'; }).join('') + '</ul></div>';
@@ -1189,6 +1245,42 @@
     var html = lis ? '<ul class="breakdown-list">'+lis+'</ul>' : '';
     if (item.waste) html += '<div class="g-meta">Small amount for one meal &mdash; easy to waste.</div>';
     return html;
+  }
+
+  // Week rollup: what these picks add up to across every serving they make, plus
+  // the average serving, which is the number that actually means something when
+  // you're deciding whether the week looks heavy.
+  function renderWeekMacros(picked){
+    var withMacros = picked.filter(hasMacros);
+    if (!withMacros.length) return '';
+    var totals = {}, servingCount = 0;
+    MACRO_KEYS.forEach(function(k){ totals[k] = null; });
+    withMacros.forEach(function(m){
+      servingCount += (parseFloat(m.servings) || 4);
+      MACRO_KEYS.forEach(function(k){
+        var t = macroTotal(m, k);
+        if (t == null) return;
+        totals[k] = (totals[k] || 0) + t;
+      });
+    });
+    var totalParts = [], avgParts = [];
+    MACRO_KEYS.forEach(function(k){
+      if (totals[k] == null) return;
+      var total = Math.round(totals[k]*10)/10;
+      var avg = servingCount ? Math.round((totals[k]/servingCount)*10)/10 : null;
+      totalParts.push(k === 'calories' ? total+' kcal' : total+MACRO_UNITS[k]+' '+MACRO_LABELS[k].toLowerCase());
+      if (avg != null) avgParts.push(k === 'calories' ? avg+' kcal' : avg+MACRO_UNITS[k]+' '+MACRO_LABELS[k].toLowerCase());
+    });
+    if (!totalParts.length) return '';
+    var missing = picked.length - withMacros.length;
+    return '<div class="card macro-week">' +
+      '<h3>Macros this week</h3>' +
+      '<div class="macro-readout">' +
+        '<div><span class="macro-scope">Average serving</span> '+escapeHtml(avgParts.join(' · '))+'</div>' +
+        '<div><span class="macro-scope">All '+servingCount+' servings</span> '+escapeHtml(totalParts.join(' · '))+'</div>' +
+      '</div>' +
+      (missing ? '<div class="g-meta" style="margin-top:8px;">'+missing+' of these '+(missing===1?'has':'have')+' no macros filled in yet, so the totals are short by that much.</div>' : '') +
+    '</div>';
   }
 
   function renderGroceryRow(item, section, listKind, checked){
@@ -1338,6 +1430,7 @@
         '</select>' +
         (m.base ? '<span class="muted">'+escapeHtml(m.base)+'</span>' : '') +
         (m.effort ? '<span class="muted mono">'+escapeHtml(m.effort)+'</span>' : '') +
+        (macroPerServing(m,'calories') != null ? '<span class="muted mono">'+macroPerServing(m,'calories')+' kcal/serving</span>' : '') +
         (inWeek ? '<span class="chip in-week">In this week</span>' : '') +
         (m.dietFlags && m.dietFlags.length ? m.dietFlags.map(function(){ return '<span class="chip flag">household rule</span>'; }).slice(0,1).join('') : '') +
       '</div></div>' +
@@ -1380,6 +1473,14 @@
       html += '<p class="muted">No ingredients listed yet — edit this meal to add them.</p>';
     }
     html += '</div>';
+    if (hasMacros(m)){
+      var servings = parseFloat(m.servings) || 4;
+      html += '<div class="detail-block"><h4>Macros</h4>' +
+        '<div class="macro-readout">' +
+          '<div><span class="macro-scope">Per serving</span> '+escapeHtml(macroSummary(m,'per'))+'</div>' +
+          '<div><span class="macro-scope">All '+servings+' servings</span> '+escapeHtml(macroSummary(m,'total'))+'</div>' +
+        '</div></div>';
+    }
     if (m.notes){
       html += '<div class="detail-block"><h4>Notes</h4><div class="detail-text muted">'+escapeHtml(m.notes)+'</div></div>';
     }
@@ -1464,6 +1565,24 @@
   }
 
   // ---- Meal form (add / edit / review-import) ----
+  function renderMacroBlock(d){
+    var servings = parseFloat(d.servings) || 4;
+    var totalLine = hasMacros(d)
+      ? 'Whole batch (' + servings + ' servings): ' + escapeHtml(macroSummary(d, 'total'))
+      : 'Fill these in per serving — the whole-batch figures work themselves out from the servings above.';
+    return '<fieldset><legend>Macros (per serving)</legend>' +
+      '<div class="macro-grid">' +
+        MACRO_KEYS.map(function(k){
+          return '<div class="field" style="margin-bottom:0;">' +
+            '<label for="f-macro-'+k+'">'+MACRO_LABELS[k]+' ('+MACRO_UNITS[k]+')</label>' +
+            '<input type="number" inputmode="decimal" min="0" step="any" id="f-macro-'+k+'" value="'+escapeHtml(d.macros ? d.macros[k] : '')+'">' +
+          '</div>';
+        }).join('') +
+      '</div>' +
+      '<div class="macro-total">'+totalLine+'</div>' +
+    '</fieldset>';
+  }
+
   function renderAdjustBlock(){
     if (sampleUnavailable) return '';
     var html = '<fieldset class="adjust-fieldset"><legend>Adjust with AI</legend>' +
@@ -1508,6 +1627,8 @@
       renderAdjustBlock() +
       '<div class="field"><label>Method</label><textarea id="f-method" rows="6">'+escapeHtml(d.method)+'</textarea></div>' +
       '<div class="field"><label>Notes (substitutions, storage, what changed last time)</label><textarea id="f-notes" rows="3">'+escapeHtml(d.notes)+'</textarea></div>' +
+
+      renderMacroBlock(d) +
 
       '<fieldset><legend>Household rule flags</legend>' + renderDietRows(d.dietFlags) +
         '<button type="button" class="btn-link" data-action="addDietRow">+ add a rule flag</button></fieldset>' +
@@ -1595,6 +1716,15 @@
     d.effortMinutes = g('f-effortMinutes'); d.servings = g('f-servings') || 4;
     d.lastCooked = g('f-lastCooked'); d.timesCooked = g('f-timesCooked') || 0; d.sourceUrl = g('f-sourceUrl');
     d.method = g('f-method'); d.notes = g('f-notes');
+    var macros = blankMacros();
+    MACRO_KEYS.forEach(function(k){
+      var el = document.getElementById('f-macro-'+k);
+      if (!el) { macros[k] = (d.macros && d.macros[k] != null) ? d.macros[k] : ''; return; }
+      var v = el.value;
+      var n = parseFloat(v);
+      macros[k] = (v === '' || isNaN(n) || n < 0) ? '' : Math.round(n*10)/10;
+    });
+    d.macros = macros;
     var adjEl = document.getElementById('adjust-instruction');
     if (adjEl) ui.adjustInstruction = adjEl.value;
     document.querySelectorAll('.diet-row').forEach(function(row){
@@ -1942,6 +2072,15 @@
         }
         if (Array.isArray(result.dietFlags)) ui.formDraft.dietFlags = mapDietFlags(result.dietFlags);
         if (Array.isArray(result.ingredients)) ui.formDraft.ingredients = mapIngredients(result.ingredients);
+        if (result.macros){
+          if (!ui.formDraft.macros) ui.formDraft.macros = blankMacros();
+          var newMacros = normalizeMacros(result.macros);
+          // Only overwrite a figure the model actually returned, so an estimate
+          // it skipped doesn't wipe one that was filled in by hand.
+          MACRO_KEYS.forEach(function(k){
+            if (newMacros[k] !== '') ui.formDraft.macros[k] = newMacros[k];
+          });
+        }
         ui.adjusting = false;
         ui.adjustInstruction = '';
         ui.adjustApplied = true;
