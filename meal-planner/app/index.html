@@ -162,6 +162,43 @@
   .macro-scope{ display:inline-block; min-width:8.5em; font-size:0.62rem; text-transform:uppercase;
     letter-spacing:0.1em; color:var(--ink-soft); font-weight:800; }
   .macro-week{ margin-bottom:16px; }
+  .macro-table{ width:100%; border-collapse:collapse; font-size:0.82rem; margin-top:10px; }
+  .macro-table th{ text-align:left; font-size:0.58rem; text-transform:uppercase; letter-spacing:0.1em;
+    color:var(--ink-soft); font-weight:800; padding:0 8px 6px 0; border-bottom:1.5px solid var(--line); }
+  .macro-table td{ padding:7px 8px 7px 0; border-bottom:1px solid var(--line); font-weight:600;
+    font-variant-numeric:tabular-nums; }
+  .macro-table td:first-child, .macro-table th:first-child{ font-weight:700; }
+  .macro-table .num{ text-align:right; white-space:nowrap; }
+  .macro-table tr.no-macros td{ color:var(--ink-soft); font-weight:500; }
+  .macro-table tfoot td{ border-bottom:none; border-top:1.5px solid var(--line-strong); font-weight:800; }
+  .table-scroll{ overflow-x:auto; }
+  .target-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:8px; }
+  @media (max-width:560px){ .target-grid{ grid-template-columns:repeat(2,1fr); } }
+  .target-grid input{ width:100%; border:1.5px solid var(--line-strong); background:var(--card); color:var(--ink);
+    border-radius:8px; padding:8px 9px; font-size:0.85rem; font-weight:600; }
+  .vs-target{ font-size:0.72rem; font-weight:800; padding:2px 7px; border-radius:999px; margin-left:8px;
+    white-space:nowrap; background:var(--neutral-tint); color:var(--ink-soft); }
+  .vs-target.over{ background:var(--terracotta-tint); color:var(--terracotta); }
+  .vs-target.under{ background:var(--navy-tint); color:var(--navy); }
+  .vs-target.on{ background:var(--olive-tint); color:var(--olive); }
+
+  /* pantry coverage */
+  .cover{ display:flex; align-items:center; gap:8px; margin-top:7px; }
+  .cover-bar{ flex:none; width:74px; height:7px; border-radius:999px; background:var(--neutral-tint); overflow:hidden; }
+  .cover-fill{ height:100%; background:var(--olive); border-radius:999px; }
+  .cover-text{ font-size:0.75rem; color:var(--ink-soft); font-weight:700; }
+  .cover-text strong{ color:var(--olive); font-weight:800; }
+  .ing-list li.covered > span:first-child{ color:var(--ink); }
+  .ing-cover{ font-size:0.62rem; text-transform:uppercase; letter-spacing:0.06em; font-weight:800;
+    color:var(--olive); background:var(--olive-tint); border-radius:999px; padding:2px 7px; margin-left:6px; }
+
+  /* inline slot editor on This Week */
+  .slot-edit{ background:var(--card); border:1.5px solid var(--line-strong); border-top:none;
+    border-radius:0 0 12px 12px; padding:14px 16px 16px; margin-top:-11px; }
+  .slot-edit h4{ font-size:0.62rem; text-transform:uppercase; letter-spacing:0.12em; color:var(--ink-soft);
+    font-weight:800; margin-bottom:8px; }
+  .slot-wrap{ display:flex; flex-direction:column; }
+  .slot-wrap.editing .slot{ border-bottom-left-radius:0; border-bottom-right-radius:0; }
   .macro-week h3{ font-size:0.68rem; text-transform:uppercase; letter-spacing:0.12em; color:var(--ink-soft);
     font-weight:800; margin-bottom:8px; }
   .adjust-fieldset{ background:var(--card); border-color:var(--line-strong); }
@@ -489,6 +526,8 @@
     linkUrl: '', linkDraft: false, linkSaving: false, linkError: null,
     pantryInput: '', pantrySaving: false, pantryChecking: false, pantryCheckNote: null,
     macroEstimating: null, macroError: null, macroErrorId: null, macroBulk: null,
+    macroDetailOpen: false, macroTargetsOpen: false, targetsSaving: false, targetDraft: null,
+    slotEdit: null, slotEditSaving: false, slotEditError: null,
     toast: null,
     copyFallbackText: null
   };
@@ -594,6 +633,43 @@
       return term && (n === term || matchesKeyword(n, term));
     });
   }
+  // How much of a recipe is already in the house. Counted over DISTINCT
+  // ingredients, not weight or cost: "6 of 9 things" is the question you can
+  // actually answer standing in the kitchen, and any weighting would be invented
+  // precision. Uses the same three-layer matcher as the grocery list, so a
+  // coverage figure and a green "In pantry" line can never disagree.
+  function pantryCoverage(m){
+    var seen = {}, names = [];
+    ((m && m.ingredients) || []).forEach(function(i){
+      var name = (i && i.item ? String(i.item) : '').trim();
+      if (!name) return;
+      var key = canonicalItemKey(name);
+      if (!key || seen[key]) return;
+      seen[key] = true;
+      names.push(name);
+    });
+    var covered = [], missing = [];
+    names.forEach(function(n){ (pantryMatchFor(n) ? covered : missing).push(n); });
+    return {
+      total: names.length,
+      covered: covered.length,
+      coveredNames: covered,
+      missing: missing,
+      pct: names.length ? Math.round((covered.length / names.length) * 100) : null
+    };
+  }
+  function isCoveredByPantry(name){ return !!pantryMatchFor(name); }
+  function renderCoverBar(cov, opts){
+    if (!cov || !cov.total) return '';
+    opts = opts || {};
+    var pct = cov.pct;
+    return '<div class="cover">' +
+      '<span class="cover-bar"><span class="cover-fill" style="width:'+pct+'%;"></span></span>' +
+      '<span class="cover-text"><strong>'+pct+'%</strong> in pantry &middot; '+cov.covered+' of '+cov.total+' ingredient'+(cov.total===1?'':'s') +
+      (opts.showShort && cov.missing.length ? ' &middot; '+cov.missing.length+' to buy' : '') +
+      '</span></div>';
+  }
+
   function updateWeek(partial){
     var cur = weekDoc || { weekStart: mondayIso(), mealIds: [], checkedItems: {} };
     var next = Object.assign({}, cur, partial);
@@ -1137,6 +1213,14 @@
     if (!skipSync && ui.formOpen && ui.formDraft && document.getElementById('form-overlay')){
       try { syncFormDraftFromDom(); } catch(e){}
     }
+    // The This Week editors live inline in a page that re-renders whenever the
+    // other person changes something, so their typing needs the same protection
+    // the meal form gets — and the same escape hatch when code has just written
+    // to them itself.
+    if (!skipSync){
+      try { syncSlotEditFromDom(); } catch(e){}
+      try { syncTargetsFromDom(); } catch(e){}
+    }
 
     // A crash anywhere in the render below (bad data, an edge case this code
     // missed) used to leave the page frozen mid-rebuild with no way back short of
@@ -1245,16 +1329,7 @@
       var mid = weekIds[i];
       var m = mid ? meals.find(function(x){ return x.id===mid; }) : null;
       if (m){
-        html += '<div class="slot"><div class="m-info">' +
-          '<div class="m-name">'+escapeHtml(m.name)+'</div>' +
-          '<div class="m-meta">' +
-            '<span class="chip tier-'+m.tier+'">'+TIER_LABELS[m.tier]+'</span>' +
-            (m.base ? '<span class="muted">'+escapeHtml(m.base)+'</span>' : '') +
-            (m.effort ? '<span class="muted mono">'+escapeHtml(m.effort)+'</span>' : '') +
-          '</div></div>' +
-          '<div class="row-actions"><button class="btn-link" data-action="openWeekPicker" data-id="'+i+'">swap</button>' +
-          '<button class="btn-link" data-action="removeFromWeek" data-id="'+i+'">remove</button></div>' +
-        '</div>';
+        html += renderWeekSlot(m, i);
       } else {
         html += '<div class="slot"><button class="slot-empty-btn" data-action="openWeekPicker" data-id="'+i+'">+ pick meal '+(i+1)+'</button></div>';
       }
@@ -1287,16 +1362,120 @@
     return html;
   }
 
+  // One night on the plan. Carries the two numbers you'd otherwise open the meal
+  // to find — what a serving costs you, and how much of it is already in the
+  // cupboard — plus a tweak panel, because the edits you make while looking at a
+  // week (servings for the night, a macro figure you actually weighed) shouldn't
+  // mean a trip to the Meals tab and back.
+  function renderWeekSlot(m, i){
+    var editing = ui.slotEdit && ui.slotEdit.id === m.id;
+    var cov = pantryCoverage(m);
+    var targets = weekTargets();
+    var perLine = hasMacros(m) ? macroSummary(m, 'per') : '';
+    var html = '<div class="slot-wrap'+(editing?' editing':'')+'"><div class="slot"><div class="m-info">' +
+      '<div class="m-name">'+escapeHtml(m.name)+'</div>' +
+      '<div class="m-meta">' +
+        '<span class="chip tier-'+m.tier+'">'+TIER_LABELS[m.tier]+'</span>' +
+        (m.base ? '<span class="muted">'+escapeHtml(m.base)+'</span>' : '') +
+        (m.effort ? '<span class="muted mono">'+escapeHtml(m.effort)+'</span>' : '') +
+        '<span class="muted mono">'+(parseFloat(m.servings)||4)+' servings</span>' +
+      '</div>' +
+      (perLine
+        ? '<div class="macro-readout" style="margin-top:7px;"><div><span class="macro-scope">Per serving</span> '+
+            escapeHtml(perLine) + vsTargetChip(m, targets) + '</div></div>'
+        : '<div class="g-meta" style="margin-top:7px;">No macros yet' +
+            (canEstimateMacros(m) ? ' — <button type="button" class="btn-link" data-action="estimateMacros" data-id="'+m.id+'"'+(ui.macroEstimating===m.id?' disabled':'')+'>'+(ui.macroEstimating===m.id?'estimating…':'estimate them')+'</button>' : '') +
+          '</div>') +
+      renderCoverBar(cov, { showShort: true }) +
+      '</div>' +
+      '<div class="row-actions">' +
+        '<button class="btn-link" data-action="toggleSlotEdit" data-id="'+m.id+'">'+(editing?'done':'tweak')+'</button>' +
+        '<button class="btn-link" data-action="openWeekPicker" data-id="'+i+'">swap</button>' +
+        '<button class="btn-link" data-action="removeFromWeek" data-id="'+i+'">remove</button>' +
+      '</div></div>';
+    if (editing) html += renderSlotEditor(m);
+    return html + '</div>';
+  }
+
+  function canEstimateMacros(m){
+    return !!sampleFn && !sampleUnavailable && ((m && m.ingredients) || []).length > 0;
+  }
+
+  function renderSlotEditor(m){
+    var d = ui.slotEdit;
+    var servings = parseFloat(d.servings) || 4;
+    var preview = { macros: normalizeMacros(d.macros), servings: servings };
+    var batch = hasMacros(preview) ? macroSummary(preview, 'total') : '';
+    var html = '<div class="slot-edit">' +
+      '<h4>Servings for this week</h4>' +
+      '<div class="field" style="max-width:160px;margin-bottom:14px;">' +
+        '<input type="number" min="1" step="1" id="slot-servings" value="'+escapeHtml(d.servings)+'">' +
+      '</div>' +
+      '<h4>Macros (per serving)</h4>' +
+      '<div class="target-grid">' +
+        MACRO_KEYS.map(function(k){
+          return '<div><label class="field-label" for="slot-macro-'+k+'">'+MACRO_LABELS[k]+' ('+MACRO_UNITS[k]+')</label>' +
+            '<input type="number" min="0" step="any" id="slot-macro-'+k+'" value="'+escapeHtml(d.macros[k])+'"></div>';
+        }).join('') +
+      '</div>' +
+      '<div class="macro-total">'+(batch ? 'Whole batch ('+servings+' servings): '+escapeHtml(batch) : 'Nothing filled in yet.')+'</div>';
+    if (canEstimateMacros(m)){
+      html += '<div style="margin-top:10px;"><button type="button" class="btn btn-ghost btn-sm" data-action="estimateSlotMacros" data-id="'+m.id+'"'+(ui.macroEstimating===m.id?' disabled':'')+'>'+(ui.macroEstimating===m.id?'Estimating…':'Estimate from ingredients')+'</button></div>';
+    }
+    if (ui.slotEditError) html += '<div class="warnbox warn" style="margin-top:10px;">'+escapeHtml(ui.slotEditError)+'</div>';
+    html += '<div class="form-actions">' +
+      '<div></div>' +
+      '<div class="row-actions">' +
+        '<button type="button" class="btn btn-ghost btn-sm" data-action="cancelSlotEdit">Cancel</button>' +
+        '<button type="button" class="btn btn-primary btn-sm" data-action="saveSlotEdit" data-id="'+m.id+'"'+(ui.slotEditSaving?' disabled':'')+'>'+(ui.slotEditSaving?'Saving…':'Save')+'</button>' +
+      '</div></div>';
+    return html + '</div>';
+  }
+
   // Week rollup: what these picks add up to across every serving they make, plus
   // the average serving, which is the number that actually means something when
   // you're deciding whether the week looks heavy.
+  function weekTargets(){
+    return normalizeMacros((weekDoc && weekDoc.macroTargets) || {});
+  }
+  function hasTargets(t){ return MACRO_KEYS.some(function(k){ return t[k] !== ''; }); }
+
+  // Per-serving comparison against whatever target the household set. Deliberately
+  // only calories: four percentages on one line is a wall of numbers, and calories
+  // is the one people scan. The full comparison lives in the table below.
+  function vsTargetChip(m, targets){
+    if (!targets || targets.calories === '') return '';
+    var per = macroPerServing(m, 'calories');
+    if (per == null) return '';
+    var pct = Math.round((per / targets.calories) * 100);
+    var cls = pct > 110 ? 'over' : (pct < 90 ? 'under' : 'on');
+    return '<span class="vs-target '+cls+'">'+pct+'% of target</span>';
+  }
+
+  // Week rollup: what these picks add up to across every serving they make, plus
+  // the average serving, which is the number that actually means something when
+  // you're deciding whether the week looks heavy. The per-meal table underneath
+  // is what turns "the week is 3200 kcal" into "and it's the curry that's heavy".
   function renderWeekMacros(picked){
     var withMacros = picked.filter(hasMacros);
+    var targets = weekTargets();
+    var html = '<div class="card macro-week">' +
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;">' +
+        '<h3 style="margin-bottom:0;">Macros this week</h3>' +
+        '<div class="row-actions">' +
+          (picked.length ? '<button type="button" class="btn-link" data-action="toggleMacroDetail">'+(ui.macroDetailOpen?'Hide the breakdown':'Show per-meal breakdown')+'</button>' : '') +
+          '<button type="button" class="btn-link" data-action="toggleMacroTargets">'+(ui.macroTargetsOpen?'Close targets':(hasTargets(targets)?'Edit targets':'Set a target'))+'</button>' +
+        '</div>' +
+      '</div>';
+
+    if (ui.macroTargetsOpen) html += renderTargetEditor(ui.targetDraft || targets);
+
     if (!withMacros.length){
       if (!picked.length) return '';
-      return '<div class="card macro-week"><h3>Macros this week</h3>' +
-        '<p class="muted">None of this week’s picks have macros filled in yet. Open a meal on the Meals tab to add or estimate them.</p></div>';
+      html += '<p class="muted" style="margin-top:10px;">None of this week’s picks have macros filled in yet. Hit “tweak” on a meal above to add or estimate them.</p>';
+      return html + '</div>';
     }
+
     var totals = {}, servingCount = 0;
     MACRO_KEYS.forEach(function(k){ totals[k] = null; });
     withMacros.forEach(function(m){
@@ -1307,24 +1486,89 @@
         totals[k] = (totals[k] || 0) + t;
       });
     });
-    var totalParts = [], avgParts = [];
+    var totalParts = [], avgParts = [], avgValues = {};
     MACRO_KEYS.forEach(function(k){
       if (totals[k] == null) return;
       var total = Math.round(totals[k]*10)/10;
       var avg = servingCount ? Math.round((totals[k]/servingCount)*10)/10 : null;
+      avgValues[k] = avg;
       totalParts.push(k === 'calories' ? total+' kcal' : total+MACRO_UNITS[k]+' '+MACRO_LABELS[k].toLowerCase());
       if (avg != null) avgParts.push(k === 'calories' ? avg+' kcal' : avg+MACRO_UNITS[k]+' '+MACRO_LABELS[k].toLowerCase());
     });
-    if (!totalParts.length) return '';
-    var missing = picked.length - withMacros.length;
-    return '<div class="card macro-week">' +
-      '<h3>Macros this week</h3>' +
-      '<div class="macro-readout">' +
-        '<div><span class="macro-scope">Average serving</span> '+escapeHtml(avgParts.join(' · '))+'</div>' +
+    if (!totalParts.length) return html + '</div>';
+
+    html += '<div class="macro-readout" style="margin-top:10px;">' +
+        '<div><span class="macro-scope">Average serving</span> '+escapeHtml(avgParts.join(' · '))+
+          vsTargetChip({ macros:{ calories: avgValues.calories }, servings:1 }, targets)+'</div>' +
         '<div><span class="macro-scope">All '+servingCount+' servings</span> '+escapeHtml(totalParts.join(' · '))+'</div>' +
+      '</div>';
+
+    var missing = picked.length - withMacros.length;
+    if (missing) html += '<div class="g-meta" style="margin-top:8px;">'+missing+' of these '+(missing===1?'has':'have')+' no macros filled in yet, so the totals are short by that much.</div>';
+
+    if (ui.macroDetailOpen) html += renderMacroTable(picked, totals, servingCount, avgValues, targets);
+    return html + '</div>';
+  }
+
+  function renderTargetEditor(targets){
+    return '<div style="margin-top:10px;padding-top:10px;border-top:1.5px solid var(--line);">' +
+      '<p class="muted" style="margin-bottom:2px;">What one serving should roughly come to. Leave anything blank to skip it — it’s only used to show how each meal compares, nothing is enforced.</p>' +
+      '<div class="target-grid">' +
+        MACRO_KEYS.map(function(k){
+          return '<div><label class="field-label" for="target-'+k+'">'+MACRO_LABELS[k]+' ('+MACRO_UNITS[k]+')</label>' +
+            '<input type="number" min="0" step="any" id="target-'+k+'" value="'+escapeHtml(targets[k] == null ? '' : targets[k])+'"></div>';
+        }).join('') +
       '</div>' +
-      (missing ? '<div class="g-meta" style="margin-top:8px;">'+missing+' of these '+(missing===1?'has':'have')+' no macros filled in yet, so the totals are short by that much.</div>' : '') +
-    '</div>';
+      '<div class="row-actions" style="margin-top:10px;">' +
+        '<button type="button" class="btn btn-primary btn-sm" data-action="saveMacroTargets"'+(ui.targetsSaving?' disabled':'')+'>'+(ui.targetsSaving?'Saving…':'Save target')+'</button>' +
+        (hasTargets(weekTargets()) ? '<button type="button" class="btn-link" data-action="clearMacroTargets">Clear it</button>' : '') +
+      '</div></div>';
+  }
+
+  // Per-meal breakdown. Every column is stated per serving except the last, so
+  // a 2-serving curry and a 6-serving traybake are compared on equal terms
+  // before the batch column explains why the week total leans the way it does.
+  function renderMacroTable(picked, totals, servingCount, avgValues, targets){
+    var showTarget = targets.calories !== '';
+    var rows = picked.map(function(m){
+      var servings = parseFloat(m.servings) || 4;
+      if (!hasMacros(m)){
+        return '<tr class="no-macros"><td>'+escapeHtml(m.name)+'</td>' +
+          '<td class="num">'+servings+'</td>' +
+          '<td class="num" colspan="'+(showTarget?6:5)+'">not filled in' +
+          (canEstimateMacros(m) ? ' — <button type="button" class="btn-link" data-action="estimateMacros" data-id="'+m.id+'"'+(ui.macroEstimating===m.id?' disabled':'')+'>'+(ui.macroEstimating===m.id?'estimating…':'estimate')+'</button>' : '') +
+          '</td></tr>';
+      }
+      var cells = MACRO_KEYS.map(function(k){
+        var v = macroPerServing(m, k);
+        return '<td class="num">'+(v == null ? '—' : v + (k === 'calories' ? '' : 'g'))+'</td>';
+      }).join('');
+      var kcalTotal = macroTotal(m, 'calories');
+      var pct = (showTarget && macroPerServing(m,'calories') != null)
+        ? Math.round((macroPerServing(m,'calories') / targets.calories) * 100) + '%'
+        : '—';
+      return '<tr><td>'+escapeHtml(m.name)+'</td>' +
+        '<td class="num">'+servings+'</td>' + cells +
+        (showTarget ? '<td class="num">'+pct+'</td>' : '') +
+        '<td class="num">'+(kcalTotal == null ? '—' : kcalTotal+' kcal')+'</td></tr>';
+    }).join('');
+
+    return '<div class="table-scroll"><table class="macro-table">' +
+      '<thead><tr><th>Meal</th><th class="num">Servings</th>' +
+        MACRO_KEYS.map(function(k){ return '<th class="num">'+MACRO_LABELS[k]+'</th>'; }).join('') +
+        (showTarget ? '<th class="num">vs target</th>' : '') +
+        '<th class="num">Whole batch</th></tr></thead>' +
+      '<tbody>'+rows+'</tbody>' +
+      '<tfoot><tr><td>Week</td><td class="num">'+servingCount+'</td>' +
+        MACRO_KEYS.map(function(k){
+          var v = avgValues[k];
+          return '<td class="num">'+(v == null ? '—' : v + (k === 'calories' ? '' : 'g'))+'</td>';
+        }).join('') +
+        (showTarget ? '<td class="num">—</td>' : '') +
+        '<td class="num">'+(totals.calories == null ? '—' : Math.round(totals.calories*10)/10+' kcal')+'</td></tr></tfoot>' +
+      '</table>' +
+      '<p class="muted" style="margin-top:8px;font-size:0.76rem;">Macro columns are per serving; the week row is the average serving across all '+servingCount+' of them.</p>' +
+      '</div>';
   }
 
   function renderGroceryRow(item, section, listKind, checked){
@@ -1492,7 +1736,9 @@
         (macroPerServing(m,'calories') != null ? '<span class="muted mono">'+macroPerServing(m,'calories')+' kcal/serving</span>' : '') +
         (inWeek ? '<span class="chip in-week">In this week</span>' : '') +
         (m.dietFlags && m.dietFlags.length ? m.dietFlags.map(function(){ return '<span class="chip flag">household rule</span>'; }).slice(0,1).join('') : '') +
-      '</div></div>' +
+      '</div>' +
+      (pantry.length ? renderCoverBar(pantryCoverage(m)) : '') +
+      '</div>' +
       '<div class="row-actions">';
     if (ui.confirmDeleteId === m.id){
       html += '<span class="muted">Delete for good?</span> <button class="btn-link" data-action="confirmDelete" data-id="'+m.id+'">Yes, delete</button> <button class="btn-link" data-action="cancelDelete" data-id="'+m.id+'">Cancel</button>';
@@ -1552,10 +1798,21 @@
       '</div>';
     html += '<div class="detail-block"><h4>Ingredients</h4>';
     if (m.ingredients && m.ingredients.length){
+      var cov = pantryCoverage(m);
+      if (pantry.length && cov.total){
+        html += renderCoverBar(cov) +
+          '<div class="g-meta" style="margin:2px 0 8px;">' +
+            (cov.missing.length
+              ? 'Still to buy: ' + escapeHtml(cov.missing.slice(0,6).join(', ')) + (cov.missing.length > 6 ? ' and '+(cov.missing.length-6)+' more' : '')
+              : 'Everything this needs is already in the house.') +
+          '</div>';
+      }
       html += '<ul class="ing-list">' + m.ingredients.map(function(ing){
         var qty = [ing.quantity, ing.unit].filter(Boolean).join(' ');
-        return '<li>' +
+        var inPantry = isCoveredByPantry(ing.item);
+        return '<li'+(inPantry?' class="covered"':'')+'>' +
           '<span>'+escapeHtml(ing.item||'')+(qty ? ' — '+escapeHtml(qty) : '')+'</span>' +
+          (inPantry ? '<span class="ing-cover">in pantry</span>' : '') +
           (ing.pantryStaple ? ' <span class="muted">(pantry staple)</span>' : '') +
           (ing.flag ? '<div class="g-flag">'+escapeHtml(flagLabel(ing.flag))+(ing.substitute ? ' — '+escapeHtml(ing.substitute) : '')+'</div>'
             : (ing.substitute ? '<div class="g-meta">Note: '+escapeHtml(ing.substitute)+'</div>' : '')) +
@@ -1843,6 +2100,28 @@
     });
   }
 
+  function syncSlotEditFromDom(){
+    var d = ui.slotEdit; if (!d) return;
+    var el = document.getElementById('slot-servings');
+    if (!el) return; // editor isn't on screen; leave the draft alone
+    d.servings = el.value;
+    MACRO_KEYS.forEach(function(k){
+      var f = document.getElementById('slot-macro-'+k);
+      if (f) d.macros[k] = f.value;
+    });
+  }
+  function syncTargetsFromDom(){
+    if (!ui.macroTargetsOpen) return;
+    var any = document.getElementById('target-calories');
+    if (!any) return;
+    var draft = {};
+    MACRO_KEYS.forEach(function(k){
+      var f = document.getElementById('target-'+k);
+      draft[k] = f ? f.value : '';
+    });
+    ui.targetDraft = draft;
+  }
+
   var actions = {
     setTab: function(el, id){ currentTab = id; ui.weekPickerOpen=false; render(); },
     dismissActionError: function(){ ui.actionError = null; render(); },
@@ -1998,6 +2277,106 @@
       } catch(e){
         ui.macroEstimating = null;
         ui.adjustError = sampleErrorMessage(e) || 'Couldn’t estimate the macros just now.';
+        renderFromDraft();
+      }
+    },
+    toggleMacroDetail: function(){ ui.macroDetailOpen = !ui.macroDetailOpen; render(); },
+    toggleMacroTargets: function(){
+      ui.macroTargetsOpen = !ui.macroTargetsOpen;
+      ui.targetDraft = ui.macroTargetsOpen ? weekTargets() : null;
+      renderFromDraft();
+    },
+    saveMacroTargets: async function(){
+      if (ui.targetsSaving) return;
+      syncTargetsFromDom();
+      var next = normalizeMacros(ui.targetDraft || {});
+      ui.targetsSaving = true; render();
+      try {
+        await updateWeek({ macroTargets: next });
+        ui.targetsSaving = false;
+        ui.macroTargetsOpen = false; ui.targetDraft = null;
+        ui.toast = hasTargets(next) ? 'Target saved' : 'Target cleared';
+        render();
+        setTimeout(function(){ ui.toast = null; render(); }, 1800);
+      } catch(err){
+        ui.targetsSaving = false;
+        render();
+        reportActionError(err);
+      }
+    },
+    clearMacroTargets: async function(){
+      ui.targetDraft = blankMacros();
+      renderFromDraft();
+      await updateWeek({ macroTargets: blankMacros() });
+      ui.macroTargetsOpen = false; ui.targetDraft = null;
+      render();
+    },
+
+    // Editing a meal from the week view. Opens a draft rather than writing
+    // through, so a half-typed serving count never reaches the shared list —
+    // and so Cancel actually cancels.
+    toggleSlotEdit: function(el, id){
+      if (ui.slotEdit && ui.slotEdit.id === id){ ui.slotEdit = null; ui.slotEditError = null; renderFromDraft(); return; }
+      var m = meals.filter(function(x){ return x.id === id; })[0];
+      if (!m) return;
+      ui.slotEdit = {
+        id: id,
+        servings: String(parseFloat(m.servings) || 4),
+        macros: Object.assign({}, normalizeMacros(m.macros))
+      };
+      ui.slotEditError = null;
+      renderFromDraft();
+    },
+    cancelSlotEdit: function(){ ui.slotEdit = null; ui.slotEditError = null; renderFromDraft(); },
+    saveSlotEdit: async function(el, id){
+      if (ui.slotEditSaving || !ui.slotEdit) return;
+      syncSlotEditFromDom();
+      var m = meals.filter(function(x){ return x.id === id; })[0];
+      if (!m){ ui.slotEdit = null; render(); return; }
+      var servings = parseFloat(ui.slotEdit.servings);
+      if (isNaN(servings) || servings < 1){
+        ui.slotEditError = 'Servings has to be at least 1 — the batch and week totals are worked out from it.';
+        renderFromDraft();
+        return;
+      }
+      var nextMacros = normalizeMacros(ui.slotEdit.macros);
+      var changed = MACRO_KEYS.some(function(k){ return String(nextMacros[k]) !== String(m.macros ? m.macros[k] : ''); });
+      var updated = Object.assign({}, m, { servings: servings, macros: nextMacros });
+      if (changed) updated.macrosSource = 'entered';
+      ui.slotEditSaving = true; ui.slotEditError = null; render();
+      try {
+        await saveMeal(updated);
+        ui.slotEditSaving = false;
+        ui.slotEdit = null;
+        ui.toast = 'Updated “'+m.name+'”';
+        render();
+        setTimeout(function(){ ui.toast = null; render(); }, 1800);
+      } catch(err){
+        ui.slotEditSaving = false;
+        ui.slotEditError = 'Couldn’t save: ' + ((err && (err.message || err.code)) || 'unknown error') + '. Your changes are still here.';
+        render();
+      }
+    },
+    // Estimate straight into the open slot editor, so it can be checked and
+    // corrected before it lands on the shared record.
+    estimateSlotMacros: async function(el, id){
+      var m = meals.filter(function(x){ return x.id === id; })[0];
+      if (!m || !sampleFn || ui.macroEstimating || !ui.slotEdit) return;
+      syncSlotEditFromDom();
+      ui.macroEstimating = id; ui.slotEditError = null; renderFromDraft();
+      try {
+        var result = await sampleFn.json(buildMacroPrompt(Object.assign({}, m, { servings: parseFloat(ui.slotEdit.servings) || m.servings })));
+        var next = normalizeMacros(result);
+        ui.macroEstimating = null;
+        if (!hasMacros({ macros: next })){
+          ui.slotEditError = 'Couldn’t estimate from these ingredients — fill the numbers in by hand.';
+        } else {
+          ui.slotEdit.macros = next;
+        }
+        renderFromDraft();
+      } catch(e){
+        ui.macroEstimating = null;
+        ui.slotEditError = sampleErrorMessage(e) || 'Couldn’t estimate that just now.';
         renderFromDraft();
       }
     },
