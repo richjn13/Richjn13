@@ -197,11 +197,21 @@
   .cook-label{ font-size:0.62rem; text-transform:uppercase; letter-spacing:0.12em; color:var(--ink-soft);
     font-weight:800; margin-bottom:10px; }
   .cook-ing{ list-style:none; margin:0; padding:0; }
-  .cook-ing li{ display:flex; flex-wrap:wrap; gap:10px; align-items:baseline; padding:11px 0;
-    border-bottom:1px solid var(--line); font-size:1.05rem; font-weight:600; }
-  .cook-ing li:last-child{ border-bottom:none; }
-  .cook-qty{ min-width:5.5em; font-weight:800; font-variant-numeric:tabular-nums; color:var(--olive); }
-  .cook-ing .g-flag{ flex-basis:100%; font-size:0.82rem; }
+  .cook-ing-row{ border-bottom:1px solid var(--line); }
+  .cook-ing-row:last-child{ border-bottom:none; }
+  /* The whole row is the hit target: tapping a 22px box with oily hands is a
+     losing game, so the label wraps everything. */
+  .cook-ing-row label{ display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:13px 2px;
+    font-size:1.05rem; font-weight:600; cursor:pointer; }
+  .cook-ing-row input[type="checkbox"]{ width:26px; height:26px; flex:none; accent-color:var(--olive); }
+  .cook-qty{ min-width:5em; font-weight:800; font-variant-numeric:tabular-nums; color:var(--olive); }
+  .cook-ing-name{ flex:1; min-width:0; }
+  .cook-ing-row.used label{ color:var(--ink-soft); }
+  .cook-ing-row.used .cook-ing-name{ text-decoration:line-through; }
+  .cook-ing-row.used .cook-qty{ color:var(--ink-soft); }
+  .cook-ing .g-flag{ padding:0 2px 10px 50px; font-size:0.82rem; }
+  .cook-step-ing{ margin-top:22px; padding-top:6px; border-top:1.5px solid var(--line); }
+  .cook-showall{ margin-top:16px; align-self:flex-start; }
   .cook-step-body{ display:flex; flex-direction:column; gap:16px; justify-content:flex-start; padding-top:28px; }
   .cook-step-num{ font-size:1rem; font-weight:900; color:var(--olive-ink); background:var(--olive);
     border-radius:999px; width:34px; height:34px; display:flex; align-items:center; justify-content:center;
@@ -1336,6 +1346,70 @@
     wakeLockSentinel = null;
   }
 
+  // Which ingredients a step actually calls for, matched against the step text.
+  //
+  // Longest name first, blanking each match out of the text as it goes. That
+  // ordering is the whole trick: "add the butter beans" would otherwise match
+  // both "butter beans" AND "butter", putting a block of dairy on a step that
+  // never mentions it. Masking the longer phrase first leaves nothing for the
+  // shorter name to hit — while "melt the butter, then add the butter beans"
+  // still correctly matches both, because each has its own text to match.
+  function stepIngredientIndexes(m, stepText){
+    var ings = (m && m.ingredients) || [];
+    var order = ings.map(function(ing, idx){
+      return { idx: idx, name: normalizePantryTerm(ing.item) };
+    }).filter(function(x){ return x.name; });
+    order.sort(function(a,b){ return b.name.length - a.name.length; });
+
+    var text = ' ' + normalizePantryTerm(stepText) + ' ';
+    var found = {};
+    order.forEach(function(x){
+      var hit = maskFirstMatch(text, x.name);
+      if (hit == null){
+        // "butter beans" written as just "the beans" in the step: fall back to
+        // the head noun, which is what a cook actually says out loud.
+        var words = x.name.split(' ');
+        var head = words[words.length - 1];
+        if (words.length > 1 && head.length >= 3) hit = maskFirstMatch(text, head);
+      }
+      if (hit != null){ text = hit; found[x.idx] = true; }
+    });
+    return ings.map(function(_, idx){ return idx; }).filter(function(idx){ return found[idx]; });
+  }
+
+  // Returns the text with the first whole-word occurrence blanked out, or null
+  // if the phrase isn't there. Shares matchesKeyword's word-boundary rules, so
+  // "oil" still doesn't match "boil".
+  function maskFirstMatch(text, phrase){
+    var esc = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    var re = new RegExp('(^|[^a-z])(' + esc + '(?:e?s)?)([^a-z]|$)', 'i');
+    var mm = re.exec(text);
+    if (!mm) return null;
+    return text.slice(0, mm.index) + mm[1] + ' '.repeat(mm[2].length) + mm[3] + text.slice(mm.index + mm[0].length);
+  }
+
+  function cookUsed(){ return (ui.cook && ui.cook.used) || {}; }
+
+  // One row, used by both the prep list and the per-step list, so a tick made in
+  // one place reads as ticked in the other — it's the same claim either way.
+  function renderCookIngRow(ing, idx){
+    var qty = [ing.quantity, ing.unit].filter(Boolean).join(' ');
+    var on = !!cookUsed()[idx];
+    return '<li class="cook-ing-row'+(on ? ' used' : '')+'">' +
+      '<label>' +
+        '<input type="checkbox" data-action="toggleCookIngredient" data-id="'+idx+'"'+(on ? ' checked' : '')+'>' +
+        '<span class="cook-qty">'+escapeHtml(qty || '—')+'</span>' +
+        '<span class="cook-ing-name">'+escapeHtml(ing.item||'')+'</span>' +
+      '</label>' +
+      (ing.flag ? '<div class="g-flag">'+escapeHtml(flagLabel(ing.flag))+(ing.substitute ? ' — '+escapeHtml(ing.substitute) : '')+'</div>' : '') +
+    '</li>';
+  }
+  function renderCookIngList(m, indexes){
+    return '<ul class="cook-ing">' + indexes.map(function(idx){
+      return renderCookIngRow(m.ingredients[idx], idx);
+    }).join('') + '</ul>';
+  }
+
   function cookMeal(){
     if (!ui.cook) return null;
     return meals.filter(function(m){ return m.id === ui.cook.id; })[0] || null;
@@ -1356,16 +1430,14 @@
         '<button class="close-x" data-action="closeCook" aria-label="Close">&times;</button>' +
       '</div>';
 
+    var allIdx = (m.ingredients || []).map(function(_, k){ return k; });
+    var usedCount = allIdx.filter(function(k){ return cookUsed()[k]; }).length;
+
     if (i === 0){
       html += '<div class="cook-body">' +
-        '<h4 class="cook-label">You need</h4>';
-      if ((m.ingredients || []).length){
-        html += '<ul class="cook-ing">' + m.ingredients.map(function(ing){
-          var qty = [ing.quantity, ing.unit].filter(Boolean).join(' ');
-          return '<li><span class="cook-qty">'+escapeHtml(qty || '—')+'</span> <span>'+escapeHtml(ing.item||'')+'</span>' +
-            (ing.flag ? '<div class="g-flag">'+escapeHtml(flagLabel(ing.flag))+(ing.substitute ? ' — '+escapeHtml(ing.substitute) : '')+'</div>' : '') +
-          '</li>';
-        }).join('') + '</ul>';
+        '<h4 class="cook-label">You need' + (allIdx.length ? ' &middot; '+usedCount+' of '+allIdx.length+' out' : '') + '</h4>';
+      if (allIdx.length){
+        html += renderCookIngList(m, allIdx);
       } else {
         html += '<p class="muted">No ingredients written down for this one.</p>';
       }
@@ -1373,10 +1445,29 @@
         (hasMacros(m) ? ' &middot; '+escapeHtml(macroSummary(m,'per'))+' each' : '') + '.</p>';
       html += '</div>';
     } else if (steps.length){
+      var stepIdx = stepIngredientIndexes(m, steps[i-1]);
+      var showAll = !!ui.cook.showAll;
       html += '<div class="cook-body cook-step-body">' +
         '<div class="cook-step-num">'+i+'</div>' +
-        '<div class="cook-step-text">'+escapeHtml(steps[i-1])+'</div>' +
-      '</div>';
+        '<div class="cook-step-text">'+escapeHtml(steps[i-1])+'</div>';
+      if (stepIdx.length && !showAll){
+        var stepUsed = stepIdx.filter(function(k){ return cookUsed()[k]; }).length;
+        html += '<div class="cook-step-ing">' +
+          '<h4 class="cook-label">For this step &middot; '+stepUsed+' of '+stepIdx.length+' in</h4>' +
+          renderCookIngList(m, stepIdx) +
+        '</div>';
+      } else if (showAll && allIdx.length){
+        html += '<div class="cook-step-ing">' +
+          '<h4 class="cook-label">Everything &middot; '+usedCount+' of '+allIdx.length+' in</h4>' +
+          renderCookIngList(m, allIdx) +
+        '</div>';
+      }
+      if (allIdx.length){
+        html += '<button type="button" class="btn-link cook-showall" data-action="toggleCookShowAll">' +
+          (showAll ? 'Just this step' : (stepIdx.length ? 'Show the full list' : 'Nothing to add here — show the full list')) +
+        '</button>';
+      }
+      html += '</div>';
     } else {
       html += '<div class="cook-body"><p class="muted">No method written down for this one yet — add one from the Meals tab and it’ll show up here as steps.</p></div>';
     }
@@ -2754,7 +2845,10 @@
     openCook: function(el, id){
       var m = meals.filter(function(x){ return x.id === id; })[0];
       if (!m) return;
-      ui.cook = { id: id, step: 0 };
+      // `used` is deliberately session-only, not saved to the shared list: it
+      // describes one person mid-cook, and syncing it would leave the other one
+      // looking at ticks from a pan they aren't standing over.
+      ui.cook = { id: id, step: 0, used: {}, showAll: false };
       ui.cookError = null;
       requestWakeLock();
       render();
@@ -2762,6 +2856,19 @@
     closeCook: function(){
       ui.cook = null; ui.cookError = null;
       releaseWakeLock();
+      render();
+    },
+    toggleCookIngredient: function(el, id){
+      if (!ui.cook) return;
+      var idx = parseInt(id, 10);
+      if (isNaN(idx)) return;
+      if (ui.cook.used[idx]) delete ui.cook.used[idx];
+      else ui.cook.used[idx] = true;
+      render();
+    },
+    toggleCookShowAll: function(){
+      if (!ui.cook) return;
+      ui.cook.showAll = !ui.cook.showAll;
       render();
     },
     cookNext: function(){
@@ -3262,7 +3369,7 @@
   // click listener below would otherwise re-run them a second time on the same
   // interaction — double-toggling a checkbox back to its old value, or tearing a
   // text input out of the DOM mid-focus when its container re-renders).
-  var CHANGE_ACTIONS = { pdfFile:1, filterTier:1, filterSort:1, weekPickerTier:1, toggleGroceryItem:1, setMealTier:1, linkDraftToggle:1 };
+  var CHANGE_ACTIONS = { pdfFile:1, filterTier:1, filterSort:1, weekPickerTier:1, toggleGroceryItem:1, setMealTier:1, linkDraftToggle:1, toggleCookIngredient:1 };
   var LIVE_INPUT_ACTIONS = { importTextInput:1, importUrlInput:1, filterSearch:1, weekPickerSearch:1, linkUrlInput:1, pantryInput:1 };
 
   // Every handler runs through here. A throw inside one used to leave the action
