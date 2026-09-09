@@ -182,6 +182,52 @@
   .vs-target.under{ background:var(--navy-tint); color:var(--navy); }
   .vs-target.on{ background:var(--olive-tint); color:var(--olive); }
 
+  /* cook mode — read at arm's length, with wet hands */
+  .cook-overlay{ background:rgba(20,25,20,0.62); align-items:stretch; padding:0; }
+  @media (min-width:640px){ .cook-overlay{ align-items:center; padding:20px; } }
+  .cook-sheet{ background:var(--card); width:100%; max-width:720px; margin:0 auto; display:flex;
+    flex-direction:column; max-height:100vh; height:100vh; }
+  @media (min-width:640px){ .cook-sheet{ height:auto; max-height:90vh; border-radius:18px; box-shadow:var(--shadow-lift); } }
+  .cook-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px;
+    padding:18px 20px 14px; border-bottom:1.5px solid var(--line); flex:none; }
+  .cook-name{ font-size:1.15rem; font-weight:900; letter-spacing:-0.03em; }
+  .cook-progress{ font-size:0.64rem; text-transform:uppercase; letter-spacing:0.12em; color:var(--olive);
+    font-weight:800; margin-top:4px; }
+  .cook-body{ flex:1; overflow-y:auto; padding:20px; }
+  .cook-label{ font-size:0.62rem; text-transform:uppercase; letter-spacing:0.12em; color:var(--ink-soft);
+    font-weight:800; margin-bottom:10px; }
+  .cook-ing{ list-style:none; margin:0; padding:0; }
+  .cook-ing li{ display:flex; flex-wrap:wrap; gap:10px; align-items:baseline; padding:11px 0;
+    border-bottom:1px solid var(--line); font-size:1.05rem; font-weight:600; }
+  .cook-ing li:last-child{ border-bottom:none; }
+  .cook-qty{ min-width:5.5em; font-weight:800; font-variant-numeric:tabular-nums; color:var(--olive); }
+  .cook-ing .g-flag{ flex-basis:100%; font-size:0.82rem; }
+  .cook-step-body{ display:flex; flex-direction:column; gap:16px; justify-content:flex-start; padding-top:28px; }
+  .cook-step-num{ font-size:1rem; font-weight:900; color:var(--olive-ink); background:var(--olive);
+    border-radius:999px; width:34px; height:34px; display:flex; align-items:center; justify-content:center;
+    flex:none; font-variant-numeric:tabular-nums; }
+  .cook-step-text{ font-size:1.45rem; line-height:1.45; font-weight:600; text-wrap:pretty; }
+  @media (max-width:520px){ .cook-step-text{ font-size:1.25rem; } }
+  .cook-foot{ display:flex; gap:10px; padding:14px 20px calc(16px + env(safe-area-inset-bottom));
+    border-top:1.5px solid var(--line); flex:none; }
+  .cook-nav{ flex:1; padding:16px 18px; font-size:1rem; }
+  .chip.cooked{ background:var(--olive); color:var(--olive-ink); }
+
+  /* history */
+  .hist-week{ margin-bottom:12px; }
+  .hist-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px;
+    flex-wrap:wrap; margin-bottom:10px; }
+  .hist-title{ font-size:1.02rem; font-weight:800; letter-spacing:-0.02em; }
+  .hist-list{ list-style:none; margin:0; padding:0; }
+  .hist-item{ display:flex; align-items:baseline; gap:10px; padding:8px 0; border-bottom:1px solid var(--line);
+    font-size:0.9rem; }
+  .hist-item:last-child{ border-bottom:none; }
+  .hist-mark{ flex:none; width:1.2em; text-align:center; font-weight:900; color:var(--line-strong); }
+  .hist-item.cooked .hist-mark{ color:var(--olive); }
+  .hist-name{ flex:1; font-weight:700; text-align:left; font-size:0.9rem; }
+  .hist-item.cooked .hist-name{ color:var(--ink); }
+  .hist-when{ flex:none; font-size:0.76rem; font-variant-numeric:tabular-nums; }
+
   /* grocery: filter by meal */
   .g-filter{ display:flex; flex-wrap:wrap; gap:7px; align-items:center; margin-bottom:12px; }
   .g-filter-label{ font-size:0.58rem; text-transform:uppercase; letter-spacing:0.12em; color:var(--ink-soft);
@@ -516,6 +562,7 @@
   var meals = [];
   var weekDoc = null; // { weekStart, mealIds:[], checkedItems:{} }
   var pantry = []; // things the household already has; matched against grocery items
+  var history = []; // finished weeks, newest last until sorted for display
   var db = null, sampleFn = null, localMode = false, sampleUnavailable = false;
   var dataLoaded = false;
   var ui = {
@@ -541,12 +588,14 @@
     macroDetailOpen: false, macroTargetsOpen: false, targetsSaving: false, targetDraft: null,
     slotEdit: null, slotEditSaving: false, slotEditError: null,
     groceryMealFilter: null, scrollToGrocery: false,
+    cook: null, cookSaving: false, cookError: null,
+    confirmDeleteHistoryId: null,
     toast: null,
     copyFallbackText: null
   };
 
   // ---------- storage: db capability, falls back to localStorage ----------
-  var LS_MEALS = 'mp_meals_v1', LS_WEEK = 'mp_week_v1', LS_PANTRY = 'mp_pantry_v1';
+  var LS_MEALS = 'mp_meals_v1', LS_WEEK = 'mp_week_v1', LS_PANTRY = 'mp_pantry_v1', LS_HISTORY = 'mp_history_v1';
   function localGetMeals(){
     try {
       var list = JSON.parse(localStorage.getItem(LS_MEALS)||'[]');
@@ -598,6 +647,55 @@
     if (db) return db.doc('week/current').set(w);
     localSaveWeek(w);
     return Promise.resolve();
+  }
+
+  // ---------- history ----------
+  // A finished week is a snapshot, not a set of references: it stores the meal
+  // NAMES it held, so renaming or deleting a meal later doesn't quietly rewrite
+  // what you ate in March. Ids are kept alongside, only so a row can still link
+  // back when the meal does still exist.
+  function localGetHistory(){
+    try {
+      var list = JSON.parse(localStorage.getItem(LS_HISTORY)||'[]');
+      return Array.isArray(list) ? list.map(normalizeHistoryEntry) : [];
+    } catch(e){ return []; }
+  }
+  function saveHistoryEntry(entry){
+    var toWrite = JSON.parse(JSON.stringify(entry));
+    toWrite.archivedAt = Date.now();
+    if (db) return db.collection('history').add(toWrite);
+    var list = localGetHistory();
+    toWrite.id = uid();
+    list.push(toWrite);
+    localWrite(LS_HISTORY, list);
+    history = list;
+    return Promise.resolve();
+  }
+  function deleteHistoryEntry(id){
+    if (db) return db.doc('history/'+id).delete();
+    var list = localGetHistory().filter(function(h){ return h.id !== id; });
+    localWrite(LS_HISTORY, list);
+    history = list;
+    render();
+    return Promise.resolve();
+  }
+  function normalizeHistoryEntry(raw){
+    raw = raw || {};
+    return {
+      id: raw.id != null ? raw.id : null,
+      weekStart: typeof raw.weekStart === 'string' ? raw.weekStart : '',
+      archivedAt: raw.archivedAt || 0,
+      meals: Array.isArray(raw.meals) ? raw.meals.map(function(m){
+        m = m || {};
+        return {
+          id: typeof m.id === 'string' ? m.id : '',
+          name: typeof m.name === 'string' ? m.name : 'A meal',
+          tier: TIERS.indexOf(m.tier) !== -1 ? m.tier : 'unranked',
+          servings: m.servings || 4,
+          cookedOn: typeof m.cookedOn === 'string' ? m.cookedOn : ''
+        };
+      }) : []
+    };
   }
 
   // ---------- pantry ----------
@@ -699,6 +797,7 @@
       meals = localGetMeals();
       weekDoc = localGetWeek();
       pantry = localGetPantry();
+      history = localGetHistory();
       dataLoaded = true;
       render();
       return;
@@ -719,6 +818,10 @@
       pantry = (data && Array.isArray(data.items)) ? data.items.filter(function(x){ return typeof x === 'string'; }) : [];
       render();
     }, function(){});
+    db.collection('history').onSnapshot(function(qs){
+      history = qs.docs.map(function(d){ return normalizeHistoryEntry(Object.assign({id:d.id}, d.data())); });
+      render();
+    }, function(){});
   }
 
   // The shared store died mid-session. `db` MUST be cleared here, not just
@@ -732,6 +835,7 @@
     meals = localGetMeals();
     weekDoc = localGetWeek();
     pantry = localGetPantry();
+    history = localGetHistory();
     dataLoaded = true;
     ui.actionError = 'Lost the shared list' + (err && err.code ? ' ('+err.code+')' : '') +
       ' — still working on this device, but changes won’t sync until you reload.';
@@ -1196,6 +1300,100 @@
   var suppressFormSync = false;
   function renderFromDraft(){ suppressFormSync = true; render(); }
 
+  // ---------- cook mode ----------
+  // Splits a written method into steps. Recipes get typed every which way —
+  // "1." / "1)" / "Step 3:" / bare paragraphs — so the numbering is stripped and
+  // re-applied, otherwise step 4 renders as "4. 4. Add the beans".
+  function cookSteps(method){
+    var raw = String(method || '').split(/\r?\n/);
+    var steps = [];
+    raw.forEach(function(line){
+      var t = line.trim();
+      if (!t) return;
+      t = t.replace(/^step\s*\d+\s*[:.)-]?\s*/i, '')
+           .replace(/^\d+\s*[.):-]\s*/, '')
+           .replace(/^[-–—•*]\s*/, '')
+           .trim();
+      if (t) steps.push(t);
+    });
+    return steps;
+  }
+
+  // Keeping the screen on is the whole difference between a usable cook mode and
+  // one you unlock with wet hands every 30 seconds. Not supported everywhere and
+  // it can be refused, so every path is guarded and nothing depends on it.
+  var wakeLockSentinel = null;
+  function requestWakeLock(){
+    try {
+      if (!navigator.wakeLock || !navigator.wakeLock.request) return;
+      navigator.wakeLock.request('screen').then(function(lock){
+        wakeLockSentinel = lock;
+      }).catch(function(){});
+    } catch(e){}
+  }
+  function releaseWakeLock(){
+    try { if (wakeLockSentinel && wakeLockSentinel.release) wakeLockSentinel.release(); } catch(e){}
+    wakeLockSentinel = null;
+  }
+
+  function cookMeal(){
+    if (!ui.cook) return null;
+    return meals.filter(function(m){ return m.id === ui.cook.id; })[0] || null;
+  }
+
+  // Step 0 is the prep screen: everything you need out on the counter, with the
+  // household's allergen flags where you can't miss them, before any cooking.
+  function renderCookOverlay(){
+    var m = cookMeal();
+    if (!m) return '';
+    var steps = cookSteps(m.method);
+    var i = ui.cook.step;
+    var cookedToday = weekCookedOn(m.id);
+    var html = '<div class="overlay cook-overlay" id="cook-overlay"><div class="cook-sheet">' +
+      '<div class="cook-head">' +
+        '<div><div class="cook-name">'+escapeHtml(m.name)+'</div>' +
+        '<div class="cook-progress">'+(i === 0 ? 'Get everything ready' : 'Step '+i+' of '+steps.length)+'</div></div>' +
+        '<button class="close-x" data-action="closeCook" aria-label="Close">&times;</button>' +
+      '</div>';
+
+    if (i === 0){
+      html += '<div class="cook-body">' +
+        '<h4 class="cook-label">You need</h4>';
+      if ((m.ingredients || []).length){
+        html += '<ul class="cook-ing">' + m.ingredients.map(function(ing){
+          var qty = [ing.quantity, ing.unit].filter(Boolean).join(' ');
+          return '<li><span class="cook-qty">'+escapeHtml(qty || '—')+'</span> <span>'+escapeHtml(ing.item||'')+'</span>' +
+            (ing.flag ? '<div class="g-flag">'+escapeHtml(flagLabel(ing.flag))+(ing.substitute ? ' — '+escapeHtml(ing.substitute) : '')+'</div>' : '') +
+          '</li>';
+        }).join('') + '</ul>';
+      } else {
+        html += '<p class="muted">No ingredients written down for this one.</p>';
+      }
+      html += '<p class="muted" style="margin-top:14px;">Makes '+(parseFloat(m.servings)||4)+' servings' +
+        (hasMacros(m) ? ' &middot; '+escapeHtml(macroSummary(m,'per'))+' each' : '') + '.</p>';
+      html += '</div>';
+    } else if (steps.length){
+      html += '<div class="cook-body cook-step-body">' +
+        '<div class="cook-step-num">'+i+'</div>' +
+        '<div class="cook-step-text">'+escapeHtml(steps[i-1])+'</div>' +
+      '</div>';
+    } else {
+      html += '<div class="cook-body"><p class="muted">No method written down for this one yet — add one from the Meals tab and it’ll show up here as steps.</p></div>';
+    }
+
+    html += '<div class="cook-foot">' +
+      '<button class="btn btn-ghost cook-nav" data-action="cookPrev"'+(i === 0 ? ' disabled' : '')+'>Back</button>';
+    if (i < steps.length){
+      html += '<button class="btn btn-primary cook-nav" data-action="cookNext">'+(i === 0 ? 'Start cooking' : 'Next')+'</button>';
+    } else {
+      html += '<button class="btn btn-forest cook-nav" data-action="finishCook" data-id="'+m.id+'"'+(ui.cookSaving?' disabled':'')+'>' +
+        (ui.cookSaving ? 'Saving…' : (cookedToday ? 'Done' : 'Done — mark as cooked')) + '</button>';
+    }
+    html += '</div>';
+    if (ui.cookError) html += '<div class="warnbox warn" style="margin:0 20px 16px;">'+escapeHtml(ui.cookError)+'</div>';
+    return html + '</div></div>';
+  }
+
   // ---------- rendering ----------
   // Every render() replaces #app's whole innerHTML (no virtual DOM), which would
   // otherwise yank focus and cursor position out of whatever text field the
@@ -1254,10 +1452,12 @@
       }
       if (currentTab === 'week') html += renderWeekTab();
       else if (currentTab === 'grocery') html += renderGroceryTab();
+      else if (currentTab === 'history') html += renderHistoryTab();
       else if (currentTab === 'meals') html += renderMealsTab();
       else if (currentTab === 'pantry') html += renderPantryTab();
       else if (currentTab === 'import') html += renderImportTab();
 
+      if (ui.cook) html += renderCookOverlay();
       if (ui.formOpen) html += renderMealFormOverlay();
       if (ui.weekPickerOpen) html += renderWeekPickerOverlay();
       html += footnote();
@@ -1294,7 +1494,8 @@
     return '' +
       '<div class="topbar"><div class="brand"><h1>Meal Planner</h1><span class="tag mono">household kitchen ops</span></div></div>' +
       '<div class="tabs">' +
-        tabBtn('week','This Week') + tabBtn('grocery', groceryTabLabel()) + tabBtn('meals','Meals') + tabBtn('pantry','Pantry') + tabBtn('import','Import') +
+        tabBtn('week','This Week') + tabBtn('grocery', groceryTabLabel()) + tabBtn('meals','Meals') +
+        tabBtn('history','History') + tabBtn('pantry','Pantry') + tabBtn('import','Import') +
       '</div>' +
       (ui.actionError
         ? '<div class="warnbox warn" style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">' +
@@ -1318,6 +1519,35 @@
   function selectedMeals(){
     return getWeekIds().map(function(id){ return id ? meals.find(function(m){ return m.id===id; }) : null; }).filter(Boolean);
   }
+  // What got cooked this week, as { mealId: 'YYYY-MM-DD' }. Kept on the week
+  // rather than derived from the meal's lastCooked, because lastCooked is a
+  // single date and says nothing about which week it belonged to.
+  function weekCookedMap(){
+    return (weekDoc && weekDoc.cooked && typeof weekDoc.cooked === 'object') ? weekDoc.cooked : {};
+  }
+  function weekCookedOn(mealId){ return weekCookedMap()[mealId] || ''; }
+
+  // Snapshot of the outgoing week, taken before its picks are cleared.
+  function buildHistoryEntry(){
+    var ids = getWeekIds().filter(Boolean);
+    if (!ids.length) return null;
+    var cooked = weekCookedMap();
+    var entry = {
+      weekStart: (weekDoc && weekDoc.weekStart) || mondayIso(),
+      meals: ids.map(function(id){
+        var m = meals.filter(function(x){ return x.id === id; })[0];
+        return {
+          id: id,
+          name: m ? m.name : 'A meal that has since been deleted',
+          tier: m ? m.tier : 'unranked',
+          servings: m ? (parseFloat(m.servings) || 4) : 4,
+          cookedOn: cooked[id] || ''
+        };
+      })
+    };
+    return entry;
+  }
+
   function renderWeekTab(){
     var picked = selectedMeals();
     var html = '';
@@ -1436,6 +1666,7 @@
         (m.base ? '<span class="muted">'+escapeHtml(m.base)+'</span>' : '') +
         (m.effort ? '<span class="muted mono">'+escapeHtml(m.effort)+'</span>' : '') +
         '<span class="muted mono">'+(parseFloat(m.servings)||4)+' servings</span>' +
+        (weekCookedOn(m.id) ? '<span class="chip cooked">Cooked</span>' : '') +
       '</div>' +
       (perLine
         ? '<div class="macro-readout" style="margin-top:7px;"><div><span class="macro-scope">Per serving</span> '+
@@ -1446,6 +1677,7 @@
       renderCoverBar(cov, { showShort: true }) +
       '</div>' +
       '<div class="row-actions">' +
+        '<button class="btn btn-forest btn-sm" data-action="openCook" data-id="'+m.id+'">Cook</button>' +
         '<button class="btn-link" data-action="showMealShopping" data-id="'+m.id+'">what’s missing</button>' +
         '<button class="btn-link" data-action="toggleSlotEdit" data-id="'+m.id+'">'+(editing?'done':'tweak')+'</button>' +
         '<button class="btn-link" data-action="openWeekPicker" data-id="'+i+'">swap</button>' +
@@ -1861,7 +2093,8 @@
       } else {
         html += '<button class="btn btn-ghost btn-sm" data-action="addMealToWeek" data-id="'+m.id+'"'+(weekFull?' disabled title="This week already has 5 picks"':'')+'>'+(weekFull?'Week full':'+ Add to week')+'</button>';
       }
-      html += '<button class="btn btn-ghost btn-sm" data-action="toggleMealView" data-id="'+m.id+'">'+(expanded?'Hide':'View')+'</button>' +
+      html += '<button class="btn btn-ghost btn-sm" data-action="openCook" data-id="'+m.id+'">Cook</button>' +
+        '<button class="btn btn-ghost btn-sm" data-action="toggleMealView" data-id="'+m.id+'">'+(expanded?'Hide':'View')+'</button>' +
         '<button class="btn btn-ghost btn-sm" data-action="editMeal" data-id="'+m.id+'">Edit</button>' +
         '<button class="btn-link" data-action="askDelete" data-id="'+m.id+'">Delete</button>';
     }
@@ -1946,6 +2179,83 @@
       html += '<div class="detail-block"><a href="'+escapeHtml(m.sourceUrl)+'" target="_blank" rel="noopener noreferrer" class="btn-link">Original source</a></div>';
     }
     html += '</div>';
+    return html;
+  }
+
+  // ---- History tab ----
+  function sortedHistory(){
+    return history.slice().sort(function(a,b){
+      return (b.archivedAt || 0) - (a.archivedAt || 0) ||
+             String(b.weekStart).localeCompare(String(a.weekStart));
+    });
+  }
+  function prettyDay(iso){
+    if (!iso) return '';
+    var d = new Date(iso + 'T00:00:00');
+    if (isNaN(d.getTime())) return iso;
+    var DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return DAYS[d.getDay()] + ' ' + d.getDate() + ' ' + MONTHS[d.getMonth()];
+  }
+  function prettyWeek(iso){
+    if (!iso) return 'A week';
+    var d = new Date(iso + 'T00:00:00');
+    if (isNaN(d.getTime())) return iso;
+    var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return 'Week of ' + d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+  }
+
+  function renderHistoryTab(){
+    var list = sortedHistory();
+    var html = '<div class="section-head"><h2>History ('+list.length+')</h2></div>';
+    html += '<p class="muted" style="margin-bottom:16px;">Every week gets filed here when you start a new one. Names are stored as they were at the time, so renaming or deleting a meal later doesn’t rewrite what you actually ate.</p>';
+
+    if (!list.length){
+      return html + '<div class="empty-state">Nothing filed yet. The first week lands here when you hit “Start a new week” on This Week.</div>';
+    }
+
+    // A cook count across everything filed answers the question the tiers are
+    // really asking: what do we actually keep making?
+    var counts = {};
+    list.forEach(function(w){
+      (w.meals || []).forEach(function(m){
+        if (!m.cookedOn) return;
+        var key = m.name;
+        counts[key] = (counts[key] || 0) + 1;
+      });
+    });
+    var top = Object.keys(counts).sort(function(a,b){ return counts[b] - counts[a] || a.localeCompare(b); }).slice(0,5);
+    if (top.length){
+      html += '<div class="card" style="margin-bottom:16px;"><h3 style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--ink-soft);margin-bottom:8px;">Most cooked</h3>' +
+        '<div class="pantry-grid">' + top.map(function(name){
+          return '<span class="pantry-item">'+escapeHtml(name)+' <strong style="margin-left:4px;">&times;'+counts[name]+'</strong></span>';
+        }).join('') + '</div></div>';
+    }
+
+    list.forEach(function(w){
+      var cooked = (w.meals || []).filter(function(m){ return m.cookedOn; }).length;
+      html += '<div class="card hist-week">' +
+        '<div class="hist-head">' +
+          '<div><h3 class="hist-title">'+escapeHtml(prettyWeek(w.weekStart))+'</h3>' +
+          '<div class="muted">'+cooked+' of '+(w.meals || []).length+' cooked</div></div>' +
+          (ui.confirmDeleteHistoryId === w.id
+            ? '<span class="row-actions"><span class="muted">Delete this week?</span>' +
+              '<button class="btn-link" data-action="confirmDeleteHistory" data-id="'+w.id+'">Yes, delete</button>' +
+              '<button class="btn-link" data-action="cancelDeleteHistory">Cancel</button></span>'
+            : '<button class="btn-link" data-action="askDeleteHistory" data-id="'+w.id+'">Delete</button>') +
+        '</div>' +
+        '<ul class="hist-list">' + (w.meals || []).map(function(m){
+          var stillExists = meals.some(function(x){ return x.id === m.id; });
+          return '<li class="hist-item'+(m.cookedOn ? ' cooked' : '')+'">' +
+            '<span class="hist-mark">'+(m.cookedOn ? '&#10003;' : '&ndash;')+'</span>' +
+            (stillExists
+              ? '<button type="button" class="btn-link hist-name" data-action="openMealFromHistory" data-id="'+m.id+'">'+escapeHtml(m.name)+'</button>'
+              : '<span class="hist-name muted">'+escapeHtml(m.name)+'</span>') +
+            '<span class="hist-when muted">'+(m.cookedOn ? escapeHtml(prettyDay(m.cookedOn)) : 'not cooked')+'</span>' +
+          '</li>';
+        }).join('') + '</ul>' +
+      '</div>';
+    });
     return html;
   }
 
@@ -2235,6 +2545,34 @@
     ui.targetDraft = draft;
   }
 
+  // Filing the outgoing week has to happen BEFORE the picks are cleared, and the
+  // reset has to happen even if filing fails — otherwise a storage hiccup leaves
+  // you unable to start a new week at all, which is worse than a missing entry.
+  async function archiveAndResetWeek(){
+    var entry = buildHistoryEntry();
+    var filed = true;
+    if (entry){
+      try { await saveHistoryEntry(entry); }
+      catch(err){ filed = false; }
+    }
+    await updateWeek({
+      weekStart: mondayIso(),
+      mealIds: [null,null,null,null,null],
+      checkedItems: {}, cooked: {},
+      pantryOverrides: {}, pantryMatches: {},
+      started: true
+    });
+    if (entry && filed){
+      var n = entry.meals.filter(function(m){ return m.cookedOn; }).length;
+      ui.toast = 'Filed last week — ' + n + ' of ' + entry.meals.length + ' cooked';
+      render();
+      setTimeout(function(){ ui.toast = null; render(); }, 2600);
+    } else if (entry && !filed){
+      ui.actionError = 'Started the new week, but couldn’t file the old one to History.';
+      render();
+    }
+  }
+
   var actions = {
     setTab: function(el, id){ currentTab = id; ui.weekPickerOpen=false; render(); },
     dismissActionError: function(){ ui.actionError = null; render(); },
@@ -2284,12 +2622,12 @@
     filterTier: function(el){ ui.mealsFilter.tier = el.value; render(); },
     filterSort: function(el){ ui.mealsFilter.sort = el.value; render(); },
 
-    startWeek: function(){ updateWeek({ weekStart: mondayIso(), mealIds: [null,null,null,null,null], checkedItems: {}, started: true, pantryOverrides: {}, pantryMatches: {} }); },
+    startWeek: function(){ return archiveAndResetWeek(); },
     askNewWeek: function(){ ui.confirmNewWeek = true; render(); },
     cancelNewWeek: function(){ ui.confirmNewWeek = false; render(); },
     confirmNewWeek: function(){
       ui.confirmNewWeek = false;
-      updateWeek({ weekStart: mondayIso(), mealIds: [null,null,null,null,null], checkedItems: {}, started: true, pantryOverrides: {}, pantryMatches: {} });
+      return archiveAndResetWeek();
     },
     autoPickWeek: function(){
       var hasExisting = getWeekIds().some(function(x){ return x; });
@@ -2413,6 +2751,80 @@
         renderFromDraft();
       }
     },
+    openCook: function(el, id){
+      var m = meals.filter(function(x){ return x.id === id; })[0];
+      if (!m) return;
+      ui.cook = { id: id, step: 0 };
+      ui.cookError = null;
+      requestWakeLock();
+      render();
+    },
+    closeCook: function(){
+      ui.cook = null; ui.cookError = null;
+      releaseWakeLock();
+      render();
+    },
+    cookNext: function(){
+      if (!ui.cook) return;
+      var m = cookMeal();
+      var total = m ? cookSteps(m.method).length : 0;
+      ui.cook.step = Math.min(ui.cook.step + 1, total);
+      render();
+    },
+    cookPrev: function(){
+      if (!ui.cook) return;
+      ui.cook.step = Math.max(ui.cook.step - 1, 0);
+      render();
+    },
+    // Recorded in two places on purpose: on the meal, because that is what the
+    // rotation rules read, and on the week, because a single lastCooked date
+    // can't say which week it belonged to once the week has rolled over.
+    finishCook: async function(el, id){
+      if (ui.cookSaving) return;
+      var m = meals.filter(function(x){ return x.id === id; })[0];
+      if (!m){ ui.cook = null; releaseWakeLock(); render(); return; }
+      var today = todayIso();
+      if (weekCookedOn(id) === today){
+        ui.cook = null; releaseWakeLock(); render();
+        return;
+      }
+      ui.cookSaving = true; ui.cookError = null; render();
+      try {
+        var updated = Object.assign({}, m, {
+          lastCooked: today,
+          timesCooked: (parseInt(m.timesCooked, 10) || 0) + 1
+        });
+        await saveMeal(updated);
+        var cooked = Object.assign({}, weekCookedMap());
+        cooked[id] = today;
+        await updateWeek({ cooked: cooked });
+        ui.cookSaving = false;
+        ui.cook = null;
+        releaseWakeLock();
+        ui.toast = 'Logged — ' + m.name + ' cooked today';
+        render();
+        setTimeout(function(){ ui.toast = null; render(); }, 2200);
+      } catch(err){
+        ui.cookSaving = false;
+        ui.cookError = 'Couldn’t log that: ' + ((err && (err.message || err.code)) || 'unknown error') + '. The meal itself is fine — try again.';
+        render();
+      }
+    },
+
+    askDeleteHistory: function(el, id){ ui.confirmDeleteHistoryId = id; render(); },
+    cancelDeleteHistory: function(){ ui.confirmDeleteHistoryId = null; render(); },
+    confirmDeleteHistory: function(el, id){
+      ui.confirmDeleteHistoryId = null;
+      render();
+      return deleteHistoryEntry(id).catch(reportActionError);
+    },
+    openMealFromHistory: function(el, id){
+      currentTab = 'meals';
+      ui.expandedMealId = id;
+      ui.mealsFilter = { tier:'', search:'', sort:'name' };
+      render();
+    },
+
     toggleMacroDetail: function(){ ui.macroDetailOpen = !ui.macroDetailOpen; render(); },
     toggleMacroTargets: function(){
       ui.macroTargetsOpen = !ui.macroTargetsOpen;
@@ -2804,6 +3216,14 @@
       ui.formSaving = true; ui.formError = null; render();
       try {
         await saveMeal(d);
+        // Marking it cooked in the form is the same claim cook mode makes, so it
+        // has to land in the same place — otherwise History disagrees with the
+        // meal's own record for no reason the household could ever see.
+        if (d.id && d.lastCooked === todayIso() && getWeekIds().indexOf(d.id) !== -1 && weekCookedOn(d.id) !== d.lastCooked){
+          var cookedMap = Object.assign({}, weekCookedMap());
+          cookedMap[d.id] = d.lastCooked;
+          await updateWeek({ cooked: cookedMap });
+        }
         ui.formSaving = false;
         resetAdjustState();
         ui.formOpen = false; ui.formDraft = null;
@@ -2913,6 +3333,7 @@
     var id = e.target && e.target.id;
     if (!id || id !== backdropPressTarget) return;
     if (id === 'form-overlay') runAction(actions.closeForm, e.target, null, e);
+    if (id === 'cook-overlay') runAction(actions.closeCook, e.target, null, e);
     if (id === 'week-picker-overlay') runAction(actions.closeWeekPicker, e.target, null, e);
   });
 
