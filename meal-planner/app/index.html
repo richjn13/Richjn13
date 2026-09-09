@@ -599,6 +599,8 @@
     slotEdit: null, slotEditSaving: false, slotEditError: null,
     groceryMealFilter: null, scrollToGrocery: false,
     cook: null, cookSaving: false, cookError: null,
+    exportOpen: false, importDataText: '', importDataError: null, importDataPreview: null,
+    importDataSaving: false, confirmImportReplace: false,
     confirmDeleteHistoryId: null,
     toast: null,
     copyFallbackText: null
@@ -2420,6 +2422,98 @@
     }
     if (ui.importError) html += '<p class="g-flag" style="margin-top:10px;">'+escapeHtml(ui.importError)+'</p>';
     html += '</div>';
+    html += renderDataSection();
+    return html;
+  }
+
+  // ---- Export / import ----
+  // Everything the household has built lives in one artifact database. This is
+  // the way out: a versioned snapshot that can be pasted back into this app, or
+  // read by whatever it's migrated to. schemaVersion is what makes the second
+  // of those possible — an importer can tell what shape it's looking at.
+  var SCHEMA_VERSION = 1;
+
+  function buildExportPayload(){
+    return {
+      schemaVersion: SCHEMA_VERSION,
+      exportedAt: new Date().toISOString(),
+      app: 'meal-planner',
+      meals: meals.map(function(m){ return JSON.parse(JSON.stringify(m)); }),
+      week: weekDoc ? JSON.parse(JSON.stringify(weekDoc)) : null,
+      pantry: pantry.slice(),
+      history: history.map(function(h){ return JSON.parse(JSON.stringify(h)); })
+    };
+  }
+  function exportText(){ return JSON.stringify(buildExportPayload(), null, 2); }
+
+  // Reads a pasted export without trusting any of it. Returns { payload, counts }
+  // or throws with something a person can act on.
+  function parseImportText(text){
+    var raw;
+    try { raw = JSON.parse(text); }
+    catch(e){ throw new Error('That isn’t valid JSON — paste the whole export, including the opening and closing braces.'); }
+    if (!raw || typeof raw !== 'object') throw new Error('That JSON isn’t a meal-planner export.');
+    if (raw.app && raw.app !== 'meal-planner') throw new Error('That export came from a different app (' + String(raw.app).slice(0,40) + ').');
+    if (raw.schemaVersion && raw.schemaVersion > SCHEMA_VERSION){
+      throw new Error('That export was written by a newer version of the app (format ' + raw.schemaVersion + ', this one reads ' + SCHEMA_VERSION + '). Update the app first.');
+    }
+    var payload = {
+      meals: Array.isArray(raw.meals) ? raw.meals.map(normalizeMeal) : [],
+      week: (raw.week && typeof raw.week === 'object') ? raw.week : null,
+      pantry: Array.isArray(raw.pantry) ? raw.pantry.filter(function(x){ return typeof x === 'string' && x.trim(); }) : [],
+      history: Array.isArray(raw.history) ? raw.history.map(normalizeHistoryEntry) : []
+    };
+    if (!payload.meals.length && !payload.pantry.length && !payload.history.length && !payload.week){
+      throw new Error('There’s nothing in that export — no meals, pantry or history.');
+    }
+    return {
+      payload: payload,
+      counts: {
+        meals: payload.meals.length,
+        pantry: payload.pantry.length,
+        history: payload.history.length,
+        week: payload.week ? 1 : 0
+      }
+    };
+  }
+
+  function renderDataSection(){
+    var html = '<div class="card" style="margin-top:16px;">' +
+      '<h3 style="margin-bottom:6px;">Back up or move your data</h3>' +
+      '<p class="muted" style="margin-bottom:12px;">Everything — meals, pantry, this week and the whole history — as one JSON snapshot. Keep a copy somewhere safe. It’s also how you’d move to a self-hosted version later without retyping a single recipe.</p>' +
+      '<div class="row-actions">' +
+        '<button type="button" class="btn btn-forest btn-sm" data-action="copyExport">Copy a backup</button>' +
+        '<button type="button" class="btn btn-ghost btn-sm" data-action="toggleExportText">'+(ui.exportOpen?'Hide it':'Show the JSON')+'</button>' +
+      '</div>' +
+      '<p class="muted" style="margin-top:8px;font-size:0.78rem;">'+meals.length+' meals &middot; '+pantry.length+' pantry items &middot; '+history.length+' filed weeks.</p>';
+    if (ui.exportOpen){
+      html += '<div class="copy-fallback"><textarea readonly onclick="this.select()">'+escapeHtml(exportText())+'</textarea></div>';
+    }
+    html += '</div>';
+
+    html += '<div class="card" style="margin-top:16px;">' +
+      '<h3 style="margin-bottom:6px;">Restore from a backup</h3>' +
+      '<p class="muted" style="margin-bottom:10px;">Paste a snapshot below. You’ll see what’s in it before anything is written.</p>' +
+      '<div class="field"><textarea id="import-data-input" data-action="importDataInput" rows="4" placeholder="Paste the JSON backup here">'+escapeHtml(ui.importDataText)+'</textarea></div>' +
+      '<button type="button" class="btn btn-ghost btn-sm" data-action="previewImportData"'+(!ui.importDataText.trim()?' disabled':'')+'>Check it</button>';
+    if (ui.importDataError) html += '<p class="g-flag" style="margin-top:10px;">'+escapeHtml(ui.importDataError)+'</p>';
+    if (ui.importDataPreview){
+      var c = ui.importDataPreview.counts;
+      html += '<div class="warnbox info" style="margin-top:12px;">' +
+        '<strong>That backup holds</strong> '+c.meals+' meal'+(c.meals===1?'':'s')+', '+c.pantry+' pantry item'+(c.pantry===1?'':'s')+', '+c.history+' filed week'+(c.history===1?'':'s')+
+        (c.week ? ' and a current week' : '') + '.' +
+      '</div>';
+      html += '<div class="row-actions" style="margin-top:10px;">' +
+        '<button type="button" class="btn btn-forest btn-sm" data-action="applyImportMerge"'+(ui.importDataSaving?' disabled':'')+'>'+(ui.importDataSaving?'Working…':'Add what’s missing')+'</button>' +
+        (ui.confirmImportReplace
+          ? '<span class="row-actions"><span class="muted">Delete everything here first?</span>' +
+            '<button type="button" class="btn-link" data-action="applyImportReplace">Yes, replace it all</button>' +
+            '<button type="button" class="btn-link" data-action="cancelImportReplace">Cancel</button></span>'
+          : '<button type="button" class="btn btn-danger btn-sm" data-action="askImportReplace"'+(ui.importDataSaving?' disabled':'')+'>Replace everything</button>') +
+      '</div>' +
+      '<p class="muted" style="margin-top:8px;font-size:0.78rem;">“Add what’s missing” keeps everything you already have and only brings in meals, pantry items and weeks that aren’t here yet. “Replace everything” deletes what’s on this list first — there’s no undo, so take a backup above before you use it.</p>';
+    }
+    html += '</div>';
     return html;
   }
 
@@ -2842,6 +2936,100 @@
         renderFromDraft();
       }
     },
+    copyExport: function(){
+      copyText(exportText(), 'Backup');
+    },
+    toggleExportText: function(){ ui.exportOpen = !ui.exportOpen; render(); },
+    importDataInput: function(el){
+      ui.importDataText = el.value;
+      ui.importDataError = null;
+      ui.importDataPreview = null;
+      ui.confirmImportReplace = false;
+    },
+    previewImportData: function(){
+      ui.importDataError = null; ui.importDataPreview = null; ui.confirmImportReplace = false;
+      var el = document.getElementById('import-data-input');
+      if (el) ui.importDataText = el.value;
+      try {
+        ui.importDataPreview = parseImportText(ui.importDataText);
+      } catch(e){
+        ui.importDataError = e && e.message ? e.message : 'Couldn’t read that backup.';
+      }
+      render();
+    },
+    askImportReplace: function(){ ui.confirmImportReplace = true; render(); },
+    cancelImportReplace: function(){ ui.confirmImportReplace = false; render(); },
+
+    // Merge is the safe door: it only ever adds. A meal already here — same id —
+    // is left exactly as it is, because the copy in front of you is the one
+    // you've been editing, and a backup is by definition older.
+    applyImportMerge: async function(){
+      if (!ui.importDataPreview || ui.importDataSaving) return;
+      var p = ui.importDataPreview.payload;
+      ui.importDataSaving = true; ui.importDataError = null; render();
+      try {
+        var haveMeal = {}; meals.forEach(function(m){ haveMeal[m.id] = true; });
+        var addedMeals = 0;
+        for (var i = 0; i < p.meals.length; i++){
+          var m = p.meals[i];
+          if (m.id && haveMeal[m.id]) continue;
+          await saveMeal(m);
+          addedMeals++;
+        }
+        var addedPantry = 0;
+        var nextPantry = pantry.slice();
+        p.pantry.forEach(function(item){
+          var exists = nextPantry.some(function(x){ return normalizePantryTerm(x) === normalizePantryTerm(item); });
+          if (!exists){ nextPantry.push(item); addedPantry++; }
+        });
+        if (addedPantry) await savePantry(nextPantry);
+
+        // History has no stable id across stores, so weeks are matched on the
+        // week they cover — importing the same backup twice must not double it.
+        var haveWeek = {}; history.forEach(function(h){ haveWeek[h.weekStart] = true; });
+        var addedHistory = 0;
+        for (var j = 0; j < p.history.length; j++){
+          var h = p.history[j];
+          if (haveWeek[h.weekStart]) continue;
+          var copy = JSON.parse(JSON.stringify(h)); delete copy.id;
+          await saveHistoryEntry(copy);
+          haveWeek[h.weekStart] = true;
+          addedHistory++;
+        }
+        finishImport('Added ' + addedMeals + ' meal' + (addedMeals===1?'':'s') + ', ' +
+          addedPantry + ' pantry item' + (addedPantry===1?'':'s') + ' and ' +
+          addedHistory + ' week' + (addedHistory===1?'':'s') + '.');
+      } catch(err){
+        ui.importDataSaving = false;
+        ui.importDataError = 'Stopped partway: ' + ((err && (err.message||err.code)) || 'unknown error') + '. Anything already added is still here — fix the problem and run it again, it skips what it has.';
+        render();
+      }
+    },
+
+    applyImportReplace: async function(){
+      if (!ui.importDataPreview || ui.importDataSaving) return;
+      var p = ui.importDataPreview.payload;
+      ui.confirmImportReplace = false;
+      ui.importDataSaving = true; ui.importDataError = null; render();
+      try {
+        var oldMeals = meals.slice(), oldHistory = history.slice();
+        for (var i = 0; i < oldMeals.length; i++){ await deleteMeal(oldMeals[i].id); }
+        for (var j = 0; j < oldHistory.length; j++){ if (oldHistory[j].id) await deleteHistoryEntry(oldHistory[j].id); }
+        for (var k = 0; k < p.meals.length; k++){ await saveMeal(p.meals[k]); }
+        await savePantry(p.pantry.slice());
+        for (var n = 0; n < p.history.length; n++){
+          var copy = JSON.parse(JSON.stringify(p.history[n])); delete copy.id;
+          await saveHistoryEntry(copy);
+        }
+        if (p.week) await saveWeek(p.week);
+        finishImport('Replaced everything from the backup.');
+      } catch(err){
+        ui.importDataSaving = false;
+        ui.importDataError = 'Stopped partway through the replace: ' + ((err && (err.message||err.code)) || 'unknown error') + '. The list may be half-written — restore from a backup before carrying on.';
+        render();
+      }
+    },
+
     openCook: function(el, id){
       var m = meals.filter(function(x){ return x.id === id; })[0];
       if (!m) return;
@@ -3347,6 +3535,16 @@
       }
     }
   };
+  function finishImport(message){
+    ui.importDataSaving = false;
+    ui.importDataPreview = null;
+    ui.importDataText = '';
+    ui.importDataError = null;
+    ui.toast = message;
+    render();
+    setTimeout(function(){ ui.toast = null; render(); }, 3000);
+  }
+
   var blurActions = {
     autoFlagRow: function(el){
       var row = el.closest('.sub-row'); if (!row) return;
@@ -3370,7 +3568,7 @@
   // interaction — double-toggling a checkbox back to its old value, or tearing a
   // text input out of the DOM mid-focus when its container re-renders).
   var CHANGE_ACTIONS = { pdfFile:1, filterTier:1, filterSort:1, weekPickerTier:1, toggleGroceryItem:1, setMealTier:1, linkDraftToggle:1, toggleCookIngredient:1 };
-  var LIVE_INPUT_ACTIONS = { importTextInput:1, importUrlInput:1, filterSearch:1, weekPickerSearch:1, linkUrlInput:1, pantryInput:1 };
+  var LIVE_INPUT_ACTIONS = { importTextInput:1, importUrlInput:1, filterSearch:1, weekPickerSearch:1, linkUrlInput:1, pantryInput:1, importDataInput:1 };
 
   // Every handler runs through here. A throw inside one used to leave the action
   // half-done with no re-render — the app just stopped responding, with the real
