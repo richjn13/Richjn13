@@ -574,6 +574,12 @@
   var pantry = []; // things the household already has; matched against grocery items
   var history = []; // finished weeks, newest last until sorted for display
   var db = null, sampleFn = null, localMode = false, sampleUnavailable = false;
+  // Self-hosted mode. `supa` is the supabase-js client, `householdId` scopes
+  // every row, `session` is the signed-in user. All three are null in the
+  // artifact and on-device modes, and every branch below reads them that way.
+  var supa = null, householdId = null, session = null, authReady = false, authError = null;
+  var MP = (typeof window !== 'undefined' && window.MP_CONFIG) ? window.MP_CONFIG : null;
+  function selfHosted(){ return !!(MP && MP.supabaseUrl && MP.supabaseAnonKey); }
   var dataLoaded = false;
   var ui = {
     formOpen: false,
@@ -599,6 +605,8 @@
     slotEdit: null, slotEditSaving: false, slotEditError: null,
     groceryMealFilter: null, scrollToGrocery: false,
     cook: null, cookSaving: false, cookError: null,
+    authMode: 'signin', authEmail: '', authBusy: false, authFormError: null, authNotice: null,
+    householdName: '', joinCode: '', inviteCode: null,
     exportOpen: false, importDataText: '', importDataError: null, importDataPreview: null,
     importDataSaving: false, confirmImportReplace: false,
     confirmDeleteHistoryId: null,
@@ -631,6 +639,7 @@
   // discarding the draft as though it worked — is indistinguishable from the app
   // simply ignoring you.
   function saveMeal(meal){
+    if (supa) return supaSaveMeal(meal);
     var toWrite = JSON.parse(JSON.stringify(meal));
     var id = toWrite.id; delete toWrite.id;
     toWrite.updatedAt = Date.now();
@@ -651,11 +660,13 @@
     return Promise.resolve();
   }
   function deleteMeal(id){
+    if (supa) return supaDeleteMeal(id);
     if (db) return db.doc('meals/'+id).delete();
     localSaveMeals(localGetMeals().filter(function(m){ return m.id!==id; }));
     return Promise.resolve();
   }
   function saveWeek(w){
+    if (supa) return supaSaveWeek(w);
     if (db) return db.doc('week/current').set(w);
     localSaveWeek(w);
     return Promise.resolve();
@@ -673,6 +684,7 @@
     } catch(e){ return []; }
   }
   function saveHistoryEntry(entry){
+    if (supa) return supaSaveHistory(entry);
     var toWrite = JSON.parse(JSON.stringify(entry));
     toWrite.archivedAt = Date.now();
     if (db) return db.collection('history').add(toWrite);
@@ -684,6 +696,7 @@
     return Promise.resolve();
   }
   function deleteHistoryEntry(id){
+    if (supa) return supaDeleteHistory(id);
     if (db) return db.doc('history/'+id).delete();
     var list = localGetHistory().filter(function(h){ return h.id !== id; });
     localWrite(LS_HISTORY, list);
@@ -710,6 +723,59 @@
     };
   }
 
+  // ---------- self-hosted backend (Supabase) ----------
+  //
+  // The artifact database hands back documents; Postgres hands back rows with a
+  // jsonb payload. Everything below is that translation and nothing more — the
+  // rest of the app never learns which one it is talking to.
+  function rowToMeal(row){ return normalizeMeal(Object.assign({}, row.data, { id: row.id })); }
+  function rowToHistory(row){ return normalizeHistoryEntry(Object.assign({}, row.data, { id: row.id })); }
+
+  function supaSaveMeal(meal){
+    var body = JSON.parse(JSON.stringify(meal));
+    var id = body.id; delete body.id;
+    body.updatedAt = Date.now();
+    if (!id) body.createdAt = Date.now();
+    var uid = session && session.user ? session.user.id : null;
+    if (id){
+      return supa.from('meals').update({ data: body, updated_by: uid }).eq('id', id).then(throwOnError);
+    }
+    return supa.from('meals')
+      .insert({ household_id: householdId, data: body, created_by: uid, updated_by: uid })
+      .then(throwOnError);
+  }
+  function supaDeleteMeal(id){
+    return supa.from('meals').delete().eq('id', id).then(throwOnError);
+  }
+  function supaSaveWeek(w){
+    var uid = session && session.user ? session.user.id : null;
+    return supa.from('weeks')
+      .upsert({ household_id: householdId, data: w, updated_by: uid }, { onConflict: 'household_id' })
+      .then(throwOnError);
+  }
+  function supaSavePantry(list){
+    var uid = session && session.user ? session.user.id : null;
+    return supa.from('pantry')
+      .upsert({ household_id: householdId, items: list, updated_by: uid }, { onConflict: 'household_id' })
+      .then(throwOnError);
+  }
+  function supaSaveHistory(entry){
+    var body = JSON.parse(JSON.stringify(entry));
+    delete body.id;
+    body.archivedAt = Date.now();
+    return supa.from('history').insert({ household_id: householdId, data: body }).then(throwOnError);
+  }
+  function supaDeleteHistory(id){
+    return supa.from('history').delete().eq('id', id).then(throwOnError);
+  }
+  // supabase-js resolves rather than rejects on a database error, so an
+  // unchecked call looks exactly like a successful one. Every write goes
+  // through here so a refused write can never be mistaken for a saved one.
+  function throwOnError(res){
+    if (res && res.error) throw new Error(res.error.message || 'The database refused that write.');
+    return res;
+  }
+
   // ---------- pantry ----------
   function localGetPantry(){
     try {
@@ -719,6 +785,7 @@
   }
   function savePantry(list){
     pantry = list;
+    if (supa) return supaSavePantry(list);
     if (db) return db.doc('pantry/current').set({ items: list, updatedAt: Date.now() });
     localWrite(LS_PANTRY, list);
     render();
@@ -798,7 +865,141 @@
     return saveWeek(next).catch(function(err){ reportActionError(err); });
   }
 
+  // Loads a script tag and resolves when it's ready. Used only in self-hosted
+  // mode — the artifact build never fetches supabase-js at all.
+  function loadScript(src){
+    return new Promise(function(resolve, reject){
+      var el = document.createElement('script');
+      el.src = src; el.async = true;
+      el.onload = function(){ resolve(); };
+      el.onerror = function(){ reject(new Error('Couldn’t load ' + src)); };
+      document.head.appendChild(el);
+    });
+  }
+
+  // In self-hosted mode the AI runs behind our own endpoint, which holds the
+  // API key server-side. The shape deliberately matches the artifact's `sample`
+  // namespace so every caller in the app stays identical.
+  function proxySample(){
+    var endpoint = (MP && MP.aiEndpoint) || '/api/ai';
+    function post(prompt, wantJson){
+      var token = session && session.access_token ? session.access_token : '';
+      return fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ prompt: prompt, json: !!wantJson })
+      }).then(function(res){
+        if (res.status === 401){ var e = new Error('Signed out'); e.code = 'not_granted'; throw e; }
+        if (res.status === 429){ var r = new Error('Too many requests'); r.code = 'rate_limited'; throw r; }
+        if (!res.ok) throw new Error('The AI service returned ' + res.status + '.');
+        return res.json();
+      }).then(function(body){
+        if (body && body.error) throw new Error(body.error);
+        if (!wantJson) return { text: (body && body.text) || '' };
+        if (body && body.data !== undefined) return body.data;
+        var e = new Error('No structured answer came back'); e.code = 'invalid_json'; throw e;
+      });
+    }
+    var fn = function(prompt){ return post(prompt, false); };
+    fn.json = function(prompt){ return post(prompt, true); };
+    return fn;
+  }
+
+  async function initSupabase(){
+    // Skip the fetch if the client is already on the page — a self-hosted build
+    // may bundle it, and tests supply their own.
+    if (!window.supabase || !window.supabase.createClient){
+      await loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js');
+    }
+    if (!window.supabase || !window.supabase.createClient) throw new Error('supabase-js didn’t load.');
+    supa = window.supabase.createClient(MP.supabaseUrl, MP.supabaseAnonKey);
+    sampleFn = proxySample();
+
+    var got = await supa.auth.getSession();
+    session = (got && got.data) ? got.data.session : null;
+
+    supa.auth.onAuthStateChange(function(_event, next){
+      var wasUser = session && session.user ? session.user.id : null;
+      session = next;
+      var nowUser = session && session.user ? session.user.id : null;
+      if (wasUser !== nowUser){
+        householdId = null; meals = []; weekDoc = null; pantry = []; history = [];
+        dataLoaded = false;
+        if (nowUser) loadHousehold();
+        else { authReady = true; render(); }
+      }
+    });
+
+    if (!session){ authReady = true; dataLoaded = true; render(); return; }
+    await loadHousehold();
+  }
+
+  // A signed-in user with no household yet gets the create-or-join screen
+  // rather than an empty app that silently drops every write.
+  async function loadHousehold(){
+    authError = null;
+    var res = await supa.from('household_members').select('household_id').limit(1);
+    if (res.error){
+      authError = res.error.message;
+      authReady = true; dataLoaded = true; render();
+      return;
+    }
+    householdId = (res.data && res.data.length) ? res.data[0].household_id : null;
+    authReady = true;
+    if (!householdId){ dataLoaded = true; render(); return; }
+    await supaLoadAll();
+    supaSubscribe();
+  }
+
+  async function supaLoadAll(){
+    var results = await Promise.all([
+      supa.from('meals').select('id,data').eq('household_id', householdId),
+      supa.from('weeks').select('data').eq('household_id', householdId).maybeSingle(),
+      supa.from('pantry').select('items').eq('household_id', householdId).maybeSingle(),
+      supa.from('history').select('id,data').eq('household_id', householdId).order('archived_at', { ascending: false })
+    ]);
+    var first = results.filter(function(r){ return r.error; })[0];
+    if (first){ authError = first.error.message; dataLoaded = true; render(); return; }
+    meals   = (results[0].data || []).map(rowToMeal);
+    weekDoc = (results[1].data && results[1].data.data) ? results[1].data.data : null;
+    pantry  = (results[2].data && Array.isArray(results[2].data.items)) ? results[2].data.items : [];
+    history = (results[3].data || []).map(rowToHistory);
+    dataLoaded = true;
+    render();
+  }
+
+  // Realtime tells us something changed; it doesn't tell us the whole truth of
+  // the table. Re-reading is a handful of small queries at this size and it
+  // cannot drift, which a stream of patches applied to local state can.
+  function supaSubscribe(){
+    var pending = null;
+    function refresh(){
+      if (pending) clearTimeout(pending);
+      pending = setTimeout(function(){ pending = null; supaLoadAll(); }, 180);
+    }
+    supa.channel('household-' + householdId)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'meals',   filter: 'household_id=eq.' + householdId }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'weeks',   filter: 'household_id=eq.' + householdId }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pantry',  filter: 'household_id=eq.' + householdId }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'history', filter: 'household_id=eq.' + householdId }, refresh)
+      .subscribe();
+  }
+
   async function initStore(){
+    if (selfHosted()){
+      try { await initSupabase(); }
+      catch(err){
+        // A failed backend must not strand them in a blank page: fall back to
+        // this device, loudly, so the app still works and the reason is visible.
+        authError = (err && err.message) || 'Couldn’t reach the server.';
+        supa = null; authReady = true;
+        localMode = true;
+        meals = localGetMeals(); weekDoc = localGetWeek();
+        pantry = localGetPantry(); history = localGetHistory();
+        dataLoaded = true; render();
+      }
+      return;
+    }
     var namespace = null, sampleNs = null;
     try { if (window.claude && window.claude.use) namespace = await window.claude.use('db'); } catch(e){ namespace = null; }
     try { if (window.claude && window.claude.use) sampleNs = await window.claude.use('sample'); } catch(e){ sampleNs = null; }
@@ -1537,6 +1738,13 @@
     // into the same crash. This boundary catches that instead and offers a way
     // back to a known-good screen.
     try {
+      // In self-hosted mode nothing renders until we know who this is and which
+      // household they're in — an app that looks normal while dropping every
+      // write is the worst of the available failures.
+      if (supa && (!authReady || !session || !householdId)){
+        app.innerHTML = renderAuthGate();
+        return;
+      }
       var html = header();
       if (!dataLoaded){
         html += '<div class="card hero"><p>Loading the list&hellip;</p></div>';
@@ -1586,6 +1794,12 @@
   function header(){
     return '' +
       '<div class="topbar"><div class="brand"><h1>Meal Planner</h1><span class="tag mono">household kitchen ops</span></div></div>' +
+      // Falling back to this device is survivable; doing it silently is not —
+      // they'd carry on planning a week their partner never sees.
+      (authError && !supa
+        ? '<div class="warnbox warn">Couldn’t reach the server (' + escapeHtml(authError) + '). ' +
+          'The app is running on this device only, so nothing will sync until it’s back. Reload once you have a connection.</div>'
+        : '') +
       '<div class="tabs">' +
         tabBtn('week','This Week') + tabBtn('grocery', groceryTabLabel()) + tabBtn('meals','Meals') +
         tabBtn('history','History') + tabBtn('pantry','Pantry') + tabBtn('import','Import') +
@@ -1600,7 +1814,93 @@
     return '<button class="tab'+(currentTab===key?' active':'')+'" data-action="setTab" data-id="'+key+'">'+label+'</button>';
   }
   function footnote(){
-    return '<div class="footnote">' + (localMode ? 'Saved on this device only — open the same link on both phones to keep the shared list in sync.' : 'The meal list and this week’s plan sync live between both of you.') + '</div>';
+    var msg = supa
+      ? 'Signed in — everything here syncs live with everyone in your household.'
+      : (localMode
+        ? 'Saved on this device only — open the same link on both phones to keep the shared list in sync.'
+        : 'The meal list and this week’s plan sync live between both of you.');
+    return '<div class="footnote">' + msg + '</div>';
+  }
+
+  // ---- Auth screens (self-hosted only) ----
+  //
+  // Two gates, in order: signed in, then in a household. They are separate
+  // because they fail for different reasons and each has its own way out.
+  function renderAuthGate(){
+    var html = '<div class="topbar"><div class="brand"><h1>Meal Planner</h1>' +
+      '<span class="tag mono">household kitchen ops</span></div></div>';
+    if (!authReady){
+      return html + '<div class="card hero"><p>Checking your session&hellip;</p></div>';
+    }
+    if (authError){
+      html += '<div class="warnbox warn">'+escapeHtml(authError)+'</div>';
+    }
+    return html + (session ? renderHouseholdSetup() : renderSignIn());
+  }
+
+  function renderSignIn(){
+    var mode = ui.authMode;
+    return '<div class="card" style="max-width:460px;margin:24px auto;">' +
+      '<h2 style="font-size:1.35rem;margin-bottom:6px;">'+(mode === 'signup' ? 'Create an account' : 'Sign in')+'</h2>' +
+      '<p class="muted" style="margin-bottom:16px;">'+(mode === 'signup'
+        ? 'One account each. You’ll join the same household on the next screen, and share one list.'
+        : 'Welcome back.')+'</p>' +
+      '<form data-submit-action="submitAuth">' +
+        '<div class="field"><label for="auth-email">Email</label>' +
+          '<input type="email" id="auth-email" autocomplete="email" required value="'+escapeHtml(ui.authEmail)+'"></div>' +
+        '<div class="field"><label for="auth-password">Password</label>' +
+          '<input type="password" id="auth-password" autocomplete="'+(mode === 'signup' ? 'new-password' : 'current-password')+'" required minlength="8"></div>' +
+        (mode === 'signup' ? '<p class="muted" style="margin:-6px 0 14px;font-size:0.78rem;">At least 8 characters.</p>' : '') +
+        (ui.authFormError ? '<div class="warnbox warn">'+escapeHtml(ui.authFormError)+'</div>' : '') +
+        (ui.authNotice ? '<div class="warnbox info">'+escapeHtml(ui.authNotice)+'</div>' : '') +
+        '<button type="submit" class="btn btn-primary" style="width:100%;"'+(ui.authBusy?' disabled':'')+'>' +
+          (ui.authBusy ? 'Working…' : (mode === 'signup' ? 'Create account' : 'Sign in')) + '</button>' +
+      '</form>' +
+      '<p class="muted" style="margin-top:14px;text-align:center;">' +
+        (mode === 'signup'
+          ? 'Already have one? <button type="button" class="btn-link" data-action="setAuthMode" data-id="signin">Sign in</button>'
+          : 'New here? <button type="button" class="btn-link" data-action="setAuthMode" data-id="signup">Create an account</button>') +
+      '</p></div>';
+  }
+
+  function renderHouseholdSetup(){
+    var email = (session && session.user && session.user.email) || '';
+    return '<div class="card" style="max-width:520px;margin:24px auto;">' +
+      '<h2 style="font-size:1.35rem;margin-bottom:6px;">One more step</h2>' +
+      '<p class="muted" style="margin-bottom:18px;">Signed in as '+escapeHtml(email)+'. A household is the shared list — start one, or join the one that already exists.</p>' +
+      (ui.authFormError ? '<div class="warnbox warn">'+escapeHtml(ui.authFormError)+'</div>' : '') +
+      '<div class="field"><label for="hh-name">Start a new household</label>' +
+        '<input type="text" id="hh-name" placeholder="Our kitchen" value="'+escapeHtml(ui.householdName)+'"></div>' +
+      '<button type="button" class="btn btn-forest" style="width:100%;" data-action="createHousehold"'+(ui.authBusy?' disabled':'')+'>' +
+        (ui.authBusy ? 'Working…' : 'Create it') + '</button>' +
+      '<div style="display:flex;align-items:center;gap:12px;margin:20px 0;color:var(--ink-soft);font-size:0.72rem;font-weight:800;letter-spacing:0.12em;">' +
+        '<span style="flex:1;height:1.5px;background:var(--line);"></span>OR<span style="flex:1;height:1.5px;background:var(--line);"></span></div>' +
+      '<div class="field"><label for="hh-code">Join with an invite code</label>' +
+        '<input type="text" id="hh-code" placeholder="e.g. 7F3A9B2C" autocapitalize="characters" value="'+escapeHtml(ui.joinCode)+'"></div>' +
+      '<button type="button" class="btn btn-ghost" style="width:100%;" data-action="joinHousehold"'+(ui.authBusy?' disabled':'')+'>Join</button>' +
+      '<p class="muted" style="margin-top:18px;text-align:center;">' +
+        '<button type="button" class="btn-link" data-action="signOut">Sign out</button></p>' +
+    '</div>';
+  }
+
+  // Lives on the Pantry tab's neighbour — the Import tab — because that's where
+  // the other household-level settings already are.
+  function renderAccountSection(){
+    if (!supa || !session) return '';
+    var email = (session.user && session.user.email) || '';
+    var html = '<div class="card" style="margin-top:16px;">' +
+      '<h3 style="margin-bottom:6px;">Household</h3>' +
+      '<p class="muted" style="margin-bottom:12px;">Signed in as '+escapeHtml(email)+'.</p>';
+    if (ui.inviteCode){
+      html += '<div class="warnbox info"><strong>Invite code:</strong> <span class="mono">'+escapeHtml(ui.inviteCode)+'</span><br>' +
+        'Give this to whoever is joining. They create an account, then enter it. Anyone with it can join, so share it directly and rotate it afterwards.</div>';
+    }
+    html += '<div class="row-actions">' +
+      '<button type="button" class="btn btn-ghost btn-sm" data-action="showInviteCode"'+(ui.authBusy?' disabled':'')+'>'+(ui.inviteCode ? 'Refresh' : 'Show the invite code')+'</button>' +
+      (ui.inviteCode ? '<button type="button" class="btn btn-ghost btn-sm" data-action="rotateInviteCode"'+(ui.authBusy?' disabled':'')+'>Make a new code</button>' : '') +
+      '<button type="button" class="btn-link" data-action="signOut">Sign out</button>' +
+    '</div></div>';
+    return html;
   }
 
   // ---- Week tab ----
@@ -2422,6 +2722,7 @@
     }
     if (ui.importError) html += '<p class="g-flag" style="margin-top:10px;">'+escapeHtml(ui.importError)+'</p>';
     html += '</div>';
+    html += renderAccountSection();
     html += renderDataSection();
     return html;
   }
@@ -2936,6 +3237,96 @@
         renderFromDraft();
       }
     },
+    setAuthMode: function(el, id){
+      ui.authMode = (id === 'signup') ? 'signup' : 'signin';
+      ui.authFormError = null; ui.authNotice = null;
+      render();
+    },
+    submitAuth: async function(el, id, extra, e){
+      e.preventDefault();
+      if (ui.authBusy || !supa) return;
+      var emailEl = document.getElementById('auth-email');
+      var passEl = document.getElementById('auth-password');
+      var email = emailEl ? emailEl.value.trim() : '';
+      var password = passEl ? passEl.value : '';
+      ui.authEmail = email;
+      if (!email || !password){
+        ui.authFormError = 'Both an email and a password, please.';
+        render(); return;
+      }
+      ui.authBusy = true; ui.authFormError = null; ui.authNotice = null; render();
+      try {
+        var res = (ui.authMode === 'signup')
+          ? await supa.auth.signUp({ email: email, password: password })
+          : await supa.auth.signInWithPassword({ email: email, password: password });
+        ui.authBusy = false;
+        if (res.error){ ui.authFormError = res.error.message; render(); return; }
+        // With email confirmation switched on, signUp returns a user but no
+        // session — saying "check your email" beats a screen that just sits there.
+        if (ui.authMode === 'signup' && res.data && !res.data.session){
+          ui.authNotice = 'Account created. Check your email for the confirmation link, then sign in.';
+          ui.authMode = 'signin';
+        }
+        render();
+      } catch(err){
+        ui.authBusy = false;
+        ui.authFormError = (err && err.message) || 'Couldn’t sign in.';
+        render();
+      }
+    },
+    signOut: async function(){
+      if (!supa) return;
+      ui.authBusy = true; render();
+      try { await supa.auth.signOut(); } catch(e){}
+      ui.authBusy = false;
+      ui.inviteCode = null;
+      currentTab = 'week';
+      render();
+    },
+    createHousehold: async function(){
+      if (!supa || ui.authBusy) return;
+      var el = document.getElementById('hh-name');
+      var name = el ? el.value.trim() : '';
+      ui.householdName = name;
+      ui.authBusy = true; ui.authFormError = null; render();
+      var res = await supa.rpc('create_household', { household_name: name || 'Our kitchen' });
+      ui.authBusy = false;
+      if (res.error){ ui.authFormError = res.error.message; render(); return; }
+      await loadHousehold();
+    },
+    joinHousehold: async function(){
+      if (!supa || ui.authBusy) return;
+      var el = document.getElementById('hh-code');
+      var code = el ? el.value.trim() : '';
+      ui.joinCode = code;
+      if (!code){ ui.authFormError = 'Enter the invite code you were given.'; render(); return; }
+      ui.authBusy = true; ui.authFormError = null; render();
+      var res = await supa.rpc('join_household', { code: code });
+      ui.authBusy = false;
+      if (res.error){ ui.authFormError = res.error.message; render(); return; }
+      await loadHousehold();
+    },
+    showInviteCode: async function(){
+      if (!supa || ui.authBusy) return;
+      ui.authBusy = true; render();
+      var res = await supa.from('households').select('invite_code').eq('id', householdId).maybeSingle();
+      ui.authBusy = false;
+      if (res.error){ reportActionError(new Error(res.error.message)); return; }
+      ui.inviteCode = res.data ? res.data.invite_code : null;
+      render();
+    },
+    rotateInviteCode: async function(){
+      if (!supa || ui.authBusy) return;
+      ui.authBusy = true; render();
+      var res = await supa.rpc('rotate_invite_code');
+      ui.authBusy = false;
+      if (res.error){ reportActionError(new Error(res.error.message)); return; }
+      ui.inviteCode = res.data;
+      ui.toast = 'New code — the old one no longer works';
+      render();
+      setTimeout(function(){ ui.toast = null; render(); }, 2600);
+    },
+
     copyExport: function(){
       copyText(exportText(), 'Backup');
     },
