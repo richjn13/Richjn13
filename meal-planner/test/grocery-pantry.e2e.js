@@ -96,7 +96,8 @@ const rowFor = (page, name) => page.locator('.g-item', { hasText: name }).first(
   // --- "I already have this" adds to the shared pantry ---
   await rowFor(page, 'butter beans').locator('button:has-text("I already have this")').click();
   await page.waitForTimeout(400);
-  const savedPantry = await page.evaluate(() => JSON.parse(localStorage.getItem('mp_pantry_v1')));
+  // Pantry entries are records now — name plus shelf plus a running-low flag.
+  const savedPantry = await page.evaluate(() => JSON.parse(localStorage.getItem('mp_pantry_v1')).map(p => p.name));
   check('butter beans added to pantry', savedPantry.indexOf('butter beans') !== -1, true);
   check('butter beans now shows as in pantry', await rowFor(page, 'butter beans').locator('.chip.in-pantry').count(), 1);
 

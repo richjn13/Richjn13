@@ -91,7 +91,7 @@ function check(name, got, want){
   check('merge added the new meal', afterMerge.length, 3);
   check('merge left the existing meal alone', afterMerge.find(m => m.id === 'm1').name, 'Traybake');
   check('merge added the pantry item',
-    await page.evaluate(() => JSON.parse(localStorage.getItem('mp_pantry_v1')).indexOf('tinned tomatoes') !== -1), true);
+    await page.evaluate(() => JSON.parse(localStorage.getItem('mp_pantry_v1')).some(p => p.name === 'tinned tomatoes')), true);
   check('merge added the older week',
     await page.evaluate(() => JSON.parse(localStorage.getItem('mp_history_v1')).length), 2);
 

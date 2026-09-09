@@ -127,11 +127,29 @@
 
   /* pantry */
   .pantry-grid{ display:flex; flex-wrap:wrap; gap:8px; }
-  .pantry-item{ display:inline-flex; align-items:center; gap:6px; background:var(--olive-tint); color:var(--olive);
-    border-radius:999px; padding:6px 8px 6px 13px; font-size:0.84rem; font-weight:700; }
-  .pantry-remove{ background:none; border:none; color:inherit; cursor:pointer; font-size:1rem; line-height:1;
-    padding:0 3px; opacity:0.65; }
+  .pantry-item{ display:inline-flex; align-items:center; background:var(--olive-tint); color:var(--olive);
+    border-radius:999px; font-size:0.84rem; font-weight:700; overflow:hidden;
+    border:1.5px solid transparent; transition:border-color 0.12s ease, background 0.12s ease; }
+  .pantry-item:hover{ border-color:var(--olive); }
+  .pantry-name{ background:none; border:none; color:inherit; font:inherit; cursor:pointer;
+    padding:7px 4px 7px 14px; display:inline-flex; align-items:center; gap:6px; }
+  .pantry-item.low{ background:var(--terracotta-tint); color:var(--terracotta); }
+  .pantry-item.low:hover{ border-color:var(--terracotta); }
+  .pantry-low-tag{ font-size:0.58rem; text-transform:uppercase; letter-spacing:0.1em; font-weight:800;
+    background:var(--terracotta); color:var(--terracotta-ink); border-radius:999px; padding:2px 6px; }
+  .pantry-remove{ background:none; border:none; color:inherit; cursor:pointer; font-size:1.05rem; line-height:1;
+    padding:7px 12px 7px 6px; opacity:0.55; }
   .pantry-remove:hover{ opacity:1; color:var(--terracotta); }
+  /* the shelf heading carries its own count, right-aligned like the grocery list */
+  .g-section h3 .muted{ font-size:0.68rem; font-weight:800; }
+
+  /* pantry ideas */
+  .idea-list{ list-style:none; margin:0; padding:0; }
+  .idea{ padding:10px 0; border-bottom:1px solid var(--line); }
+  .idea:last-child{ border-bottom:none; }
+  .idea-head{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; font-size:0.95rem; }
+  .idea.ready .idea-head strong{ color:var(--olive); }
+  .idea .g-meta{ margin-top:3px; }
   .have-it-btn{ margin-top:5px; font-size:0.74rem; }
 
   /* form */
@@ -600,6 +618,7 @@
     formSaving: false,
     linkUrl: '', linkDraft: false, linkSaving: false, linkError: null,
     pantryInput: '', pantryChecking: false, pantryCheckNote: null,
+    pantrySortBusy: false, pantryAddNote: null, pantryIdeas: null, pantryIdeasBusy: false,
     macroEstimating: null, macroError: null, macroErrorId: null, macroBulk: null,
     macroDetailOpen: false, macroTargetsOpen: false, targetsSaving: false, targetDraft: null,
     slotEdit: null, slotEditSaving: false, slotEditError: null,
@@ -779,8 +798,7 @@
   // ---------- pantry ----------
   function localGetPantry(){
     try {
-      var list = JSON.parse(localStorage.getItem(LS_PANTRY)||'[]');
-      return Array.isArray(list) ? list.filter(function(x){ return typeof x === 'string'; }) : [];
+      return normalizePantryList(JSON.parse(localStorage.getItem(LS_PANTRY)||'[]'));
     } catch(e){ return []; }
   }
   function savePantry(list){
@@ -792,6 +810,30 @@
     return Promise.resolve();
   }
   function normalizePantryTerm(s){ return String(s||'').toLowerCase().trim().replace(/\s+/g,' '); }
+
+  // A pantry entry used to be a bare string. It's an object now — a shelf it
+  // lives on, and whether it's running low — but every old list is still a list
+  // of strings, so this reads both and the rest of the app only ever sees the
+  // object form.
+  function normalizePantryItem(raw){
+    if (typeof raw === 'string') return { name: raw.trim(), section: 'other', low: false };
+    raw = raw || {};
+    return {
+      name: typeof raw.name === 'string' ? raw.name.trim() : '',
+      section: SECTIONS.indexOf(raw.section) !== -1 ? raw.section : 'other',
+      low: !!raw.low
+    };
+  }
+  function normalizePantryList(list){
+    return (Array.isArray(list) ? list : [])
+      .map(normalizePantryItem)
+      .filter(function(x){ return x.name; });
+  }
+  function pantryNames(){ return pantry.map(function(p){ return p.name; }); }
+  function pantryHas(name){
+    var n = normalizePantryTerm(name);
+    return pantry.some(function(p){ return normalizePantryTerm(p.name) === n; });
+  }
   // Which pantry term covers this shopping item, or null.
   //
   // Three layers, in order: an explicit "not really" override always wins;
@@ -805,9 +847,9 @@
     var overrides = (weekDoc && weekDoc.pantryOverrides) || {};
     if (overrides[n]) return null;
     for (var i=0;i<pantry.length;i++){
-      var term = normalizePantryTerm(pantry[i]);
+      var term = normalizePantryTerm(pantry[i].name);
       if (!term) continue;
-      if (n === term || matchesKeyword(n, term)) return pantry[i];
+      if (n === term || matchesKeyword(n, term)) return pantry[i].name;
     }
     var aiMatches = (weekDoc && weekDoc.pantryMatches) || {};
     if (aiMatches[n]) return aiMatches[n];
@@ -818,7 +860,7 @@
   function matchesLiterally(itemName){
     var n = normalizePantryTerm(itemName);
     return pantry.some(function(p){
-      var term = normalizePantryTerm(p);
+      var term = normalizePantryTerm(p.name);
       return term && (n === term || matchesKeyword(n, term));
     });
   }
@@ -962,7 +1004,7 @@
     if (first){ authError = first.error.message; dataLoaded = true; render(); return; }
     meals   = (results[0].data || []).map(rowToMeal);
     weekDoc = (results[1].data && results[1].data.data) ? results[1].data.data : null;
-    pantry  = (results[2].data && Array.isArray(results[2].data.items)) ? results[2].data.items : [];
+    pantry  = normalizePantryList(results[2].data && results[2].data.items);
     history = (results[3].data || []).map(rowToHistory);
     dataLoaded = true;
     render();
@@ -1028,7 +1070,7 @@
     }, function(err){ fallBackToLocal(err); });
     db.doc('pantry/current').onSnapshot(function(snap){
       var data = snap.exists ? snap.data() : null;
-      pantry = (data && Array.isArray(data.items)) ? data.items.filter(function(x){ return typeof x === 'string'; }) : [];
+      pantry = normalizePantryList(data && data.items);
       render();
     }, function(){});
     db.collection('history').onSnapshot(function(qs){
@@ -1406,6 +1448,58 @@
   // "tinned tomatoes", "vegetable bouillon" against "stock" — while being clear
   // that a near-miss is worse than a miss: telling someone they already have
   // something they don't means the meal can't be cooked.
+  // Sorting what someone typed into the pantry. The job is tidying wording and
+  // picking a shelf — NOT inventing items, which is the failure that would
+  // quietly put things in the cupboard that were never bought.
+  function buildPantrySortPrompt(rawText, existingNames){
+    return 'Someone is adding things to a household pantry list. Turn what they typed into clean entries.\n\n'
+      + 'What they typed:\n"""\n' + String(rawText).slice(0, 2000) + '\n"""\n\n'
+      + 'Already on the list (do not repeat these):\n'
+      + (existingNames.length ? existingNames.map(function(n){ return '- ' + n; }).join('\n') : '- (nothing yet)') + '\n\n'
+      + 'Rules:\n'
+      + '- One entry per distinct thing. Split on commas, "and", and line breaks.\n'
+      + '- Use the plainest shopping name: "tinned tomatoes", not "1 tin of chopped toms".\n'
+      + '- Drop quantities and packaging — this is a list of what is in the house, not how much.\n'
+      + '- NEVER add anything they did not mention. No assumed staples, no "you probably also have".\n'
+      + '- Skip anything already on the list above.\n'
+      + '- Put each on one shelf: "produce", "protein", "dairy-and-chilled", "tins-and-dry-goods", "freezer", or "other".\n'
+      + '- If they said something is running low or nearly out, set low to true.\n\n'
+      + 'Reply with ONLY this JSON:\n'
+      + '{ "items": [ { "name": string, "section": string, "low": boolean } ] }';
+  }
+
+  // "What can we make?" — matched against their own saved meals first, because
+  // a meal already in the list comes with a method, macros and the household's
+  // allergen work already done. Fresh ideas come last and are labelled as
+  // starting points, never as vetted recipes.
+  function buildPantryIdeasPrompt(pantryItems, mealList){
+    var shelves = pantryItems.map(function(p){
+      return '- ' + p.name + (p.low ? ' (running low)' : '');
+    }).join('\n');
+    var saved = mealList.slice(0, 60).map(function(m){
+      var ings = (m.ingredients || []).map(function(i){ return i.item; }).filter(Boolean).join(', ');
+      return '- ' + m.name + (ings ? ' — needs: ' + ings : '');
+    }).join('\n');
+
+    return 'A household wants to know what they can cook from what is in the house.\n\n'
+      + HOUSEHOLD_RULES_TEXT + ' Never suggest anything that breaks one of these, and never suggest a '
+      + 'substitution that reintroduces one.\n\n'
+      + 'In the house:\n' + (shelves || '- (nothing)') + '\n\n'
+      + 'Their saved meals:\n' + (saved || '- (none)') + '\n\n'
+      + 'Assume they also have salt, pepper and cooking oil. Assume nothing else.\n\n'
+      + 'Three answers, in this order of usefulness:\n'
+      + '1. readyNow — saved meals they could cook TONIGHT with what is listed. Use the meal name EXACTLY as '
+      + 'written above. Be strict: if a main component is missing, it does not belong here.\n'
+      + '2. almost — saved meals missing only one or two things, with exactly what is missing. Same exact names.\n'
+      + '3. ideas — at most four dishes NOT in their list that would use up what they have, especially anything '
+      + 'marked running low. Say briefly which pantry items each one uses.\n\n'
+      + 'If a section has nothing worth putting in it, return an empty array for it rather than padding it.\n\n'
+      + 'Reply with ONLY this JSON:\n'
+      + '{ "readyNow": [ { "name": "<exact saved meal name>", "note": "<short, optional>" } ], '
+      + '"almost": [ { "name": "<exact saved meal name>", "missing": ["<item>"] } ], '
+      + '"ideas": [ { "name": string, "uses": "<pantry items it uses>", "note": "<one line on what it is>" } ] }';
+  }
+
   function buildPantryMatchPrompt(pantryList, itemNames){
     var noMatchRule = 'Do NOT treat different ingredients as the same just because they sound alike or '
       + 'belong to the same family: butter is not butter beans, plain flour is not cornflour, white wine '
@@ -2653,30 +2747,143 @@
   }
 
   // ---- Pantry tab ----
+  //
+  // A flat wall of chips told you nothing except that you own a lot of things.
+  // Grouped by the same shelves the grocery list uses, so the two pages read
+  // the same way, with the running-low state that feeds back into shopping.
+  function pantryBySection(){
+    var by = {};
+    SECTIONS.forEach(function(sec){ by[sec] = []; });
+    pantry.forEach(function(item){ by[item.section || 'other'].push(item); });
+    SECTIONS.forEach(function(sec){
+      by[sec].sort(function(a,b){ return a.name.localeCompare(b.name); });
+    });
+    return by;
+  }
+  function pantryLowItems(){ return pantry.filter(function(p){ return p.low; }); }
+
   function renderPantryTab(){
-    var sorted = pantry.slice().sort(function(a,b){ return String(a).localeCompare(String(b)); });
-    var html = '<div class="section-head"><h2>Pantry ('+pantry.length+')</h2></div>';
-    html += '<div class="card" style="margin-bottom:16px;">' +
-      '<label class="field-label" for="pantry-input">What do you already have?</label>' +
-      '<p class="muted" style="margin-bottom:10px;">Anything listed here is treated as already in the house. On the grocery list it moves out of “To buy” into “Check the cupboard first” and gets marked as pantry, so you don’t buy olive oil for the fourth time.</p>' +
-      '<div class="adjust-row">' +
-        '<input type="text" id="pantry-input" data-action="pantryInput" placeholder="e.g. olive oil, salt, tinned tomatoes" value="'+escapeHtml(ui.pantryInput)+'">' +
-        '<button type="button" class="btn btn-forest btn-sm" data-action="addPantryItem"'+(!ui.pantryInput.trim()?' disabled':'')+'>Add</button>' +
-      '</div>' +
-      '<p class="muted" style="margin-top:8px;font-size:0.78rem;">Separate several with commas to add them all at once.</p>' +
+    var low = pantryLowItems();
+    var html = '<div class="section-head"><h2>Pantry ('+pantry.length+')</h2>' +
+      (pantry.length && sampleFn && !sampleUnavailable
+        ? '<button class="btn btn-navy btn-sm" data-action="pantryIdeas"'+(ui.pantryIdeasBusy?' disabled':'')+'>'+(ui.pantryIdeasBusy?'Thinking…':'What can we make?')+'</button>'
+        : '') +
     '</div>';
 
-    if (!sorted.length){
-      html += '<div class="empty-state">Nothing in the pantry yet. Add the staples you always keep — oil, salt, stock, rice — and they’ll stop showing up on the buy list.</div>';
-      return html;
+    // --- add ---
+    html += '<div class="card" style="margin-bottom:16px;">' +
+      '<label class="field-label" for="pantry-input">What have you got?</label>' +
+      '<p class="muted" style="margin-bottom:10px;">Anything here is treated as already in the house: on the grocery list it moves out of “To buy” into “Check the cupboard first”. Type as many as you like, however you\u2019d say them out loud.</p>' +
+      '<div class="adjust-row">' +
+        '<input type="text" id="pantry-input" data-action="pantryInput" placeholder="tinned tomatoes, olive oil, half a bag of rice" value="'+escapeHtml(ui.pantryInput)+'">' +
+        (sampleFn && !sampleUnavailable
+          ? '<button type="button" class="btn btn-forest btn-sm" data-action="addPantryWithAi"'+((!ui.pantryInput.trim()||ui.pantrySortBusy)?' disabled':'')+'>'+(ui.pantrySortBusy?'Adding…':'Add & sort')+'</button>'
+          : '') +
+        '<button type="button" class="btn btn-ghost btn-sm" data-action="addPantryItem"'+(!ui.pantryInput.trim()?' disabled':'')+'>Add plain</button>' +
+      '</div>' +
+      (sampleFn && !sampleUnavailable
+        ? '<p class="muted" style="margin-top:8px;font-size:0.78rem;">“Add &amp; sort” tidies the wording and files each one on the right shelf. “Add plain” takes them exactly as typed, comma-separated.</p>'
+        : '<p class="muted" style="margin-top:8px;font-size:0.78rem;">Separate several with commas.</p>') +
+      (ui.pantryAddNote ? '<div class="warnbox info" style="margin-top:10px;">'+escapeHtml(ui.pantryAddNote)+'</div>' : '') +
+    '</div>';
+
+    if (ui.pantryIdeas) html += renderPantryIdeas();
+
+    if (!pantry.length){
+      return html + '<div class="empty-state">Nothing in the pantry yet. Add the staples you always keep &mdash; oil, salt, stock, rice &mdash; and they\u2019ll stop showing up on the buy list.</div>';
     }
-    html += '<div class="card"><div class="pantry-grid">';
-    sorted.forEach(function(item){
-      html += '<span class="pantry-item">'+escapeHtml(item) +
-        '<button type="button" class="pantry-remove" data-action="removePantryItem" data-id="'+escapeHtml(item)+'" title="Remove">&times;</button></span>';
+
+    if (low.length){
+      html += '<div class="warnbox warn"><strong>Running low:</strong> ' +
+        escapeHtml(low.map(function(p){ return p.name; }).join(', ')) +
+        '. These still count as in the house, so tick them off the shelf when they actually run out.</div>';
+    }
+
+    // --- the shelves ---
+    var by = pantryBySection();
+    html += '<div class="card">';
+    var any = false;
+    SECTIONS.forEach(function(sec){
+      var items = by[sec];
+      if (!items.length) return;
+      any = true;
+      html += '<div class="g-section"><h3>'+SECTION_LABELS[sec]+'<span class="muted">'+items.length+'</span></h3>' +
+        '<div class="pantry-grid">' +
+        items.map(function(item){
+          var key = encodeURIComponent(item.name);
+          return '<span class="pantry-item'+(item.low?' low':'')+'">' +
+            '<button type="button" class="pantry-name" data-action="togglePantryLow" data-id="'+key+'" title="'+(item.low?'Mark as stocked up':'Mark as running low')+'">' +
+              escapeHtml(item.name) + (item.low ? ' <span class="pantry-low-tag">low</span>' : '') +
+            '</button>' +
+            '<button type="button" class="pantry-remove" data-action="removePantryItem" data-id="'+key+'" title="Remove">&times;</button>' +
+          '</span>';
+        }).join('') +
+        '</div></div>';
     });
-    html += '</div></div>';
+    if (!any) html += '<div class="muted">Nothing on the shelves yet.</div>';
+    html += '</div>';
+    html += '<p class="muted" style="margin-top:10px;font-size:0.78rem;">Tap a name to flag it as running low; the &times; removes it.</p>';
     return html;
+  }
+
+  // "What can we make?" — the answer people actually want from a pantry.
+  // Three buckets, in descending order of usefulness on a Tuesday night.
+  function renderPantryIdeas(){
+    var r = ui.pantryIdeas;
+    var html = '<div class="card" style="margin-bottom:16px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px;">' +
+        '<h3 style="margin:0;">What you could make</h3>' +
+        '<button type="button" class="btn-link" data-action="clearPantryIdeas">Close</button>' +
+      '</div>';
+
+    if (r.error){
+      return html + '<p class="g-flag">'+escapeHtml(r.error)+'</p></div>';
+    }
+
+    var readyNow = r.readyNow || [], almost = r.almost || [], ideas = r.ideas || [];
+    if (!readyNow.length && !almost.length && !ideas.length){
+      return html + '<p class="muted">Nothing came back. Add a few more things to the pantry and try again.</p></div>';
+    }
+
+    if (readyNow.length){
+      html += '<h4 class="cook-label" style="margin-top:12px;">Ready now &mdash; from your own meals</h4>' +
+        '<ul class="idea-list">' + readyNow.map(function(x){
+          var meal = meals.filter(function(m){ return m.name === x.name; })[0];
+          return '<li class="idea ready">' +
+            '<div class="idea-head"><strong>'+escapeHtml(x.name)+'</strong>' +
+              (meal ? ' <button type="button" class="btn-link" data-action="openCook" data-id="'+meal.id+'">Cook it</button>' : '') +
+            '</div>' +
+            (x.note ? '<div class="g-meta">'+escapeHtml(x.note)+'</div>' : '') +
+          '</li>';
+        }).join('') + '</ul>';
+    }
+
+    if (almost.length){
+      html += '<h4 class="cook-label" style="margin-top:16px;">Almost &mdash; one or two things short</h4>' +
+        '<ul class="idea-list">' + almost.map(function(x){
+          var missing = Array.isArray(x.missing) ? x.missing : [];
+          return '<li class="idea">' +
+            '<div class="idea-head"><strong>'+escapeHtml(x.name)+'</strong></div>' +
+            (missing.length ? '<div class="g-meta">Needs '+escapeHtml(missing.join(', '))+'</div>' : '') +
+          '</li>';
+        }).join('') + '</ul>';
+    }
+
+    if (ideas.length){
+      html += '<h4 class="cook-label" style="margin-top:16px;">Ideas beyond your list</h4>' +
+        '<ul class="idea-list">' + ideas.map(function(x, i){
+          return '<li class="idea">' +
+            '<div class="idea-head"><strong>'+escapeHtml(x.name)+'</strong>' +
+              '<button type="button" class="btn-link" data-action="draftIdeaMeal" data-id="'+i+'">Add it to Meals</button>' +
+            '</div>' +
+            (x.uses ? '<div class="g-meta">Uses '+escapeHtml(x.uses)+'</div>' : '') +
+            (x.note ? '<div class="g-meta">'+escapeHtml(x.note)+'</div>' : '') +
+          '</li>';
+        }).join('') + '</ul>';
+    }
+
+    html += '<p class="muted" style="margin-top:14px;font-size:0.78rem;">Suggestions, not a stock take &mdash; it assumes you have salt, pepper and oil, and it can\u2019t see how much of anything is left. Check before you commit to a plan.</p>';
+    return html + '</div>';
   }
 
   // ---- Import tab ----
@@ -2761,7 +2968,7 @@
     var payload = {
       meals: Array.isArray(raw.meals) ? raw.meals.map(normalizeMeal) : [],
       week: (raw.week && typeof raw.week === 'object') ? raw.week : null,
-      pantry: Array.isArray(raw.pantry) ? raw.pantry.filter(function(x){ return typeof x === 'string' && x.trim(); }) : [],
+      pantry: normalizePantryList(raw.pantry),
       history: Array.isArray(raw.history) ? raw.history.map(normalizeHistoryEntry) : []
     };
     if (!payload.meals.length && !payload.pantry.length && !payload.history.length && !payload.week){
@@ -3192,26 +3399,123 @@
 
     importTextInput: function(el){ ui.importRawText = el.value; },
     importUrlInput: function(el){ ui.importSourceUrl = el.value; },
-    pantryInput: function(el){ ui.pantryInput = el.value; },
+    pantryInput: function(el){ ui.pantryInput = el.value; ui.pantryAddNote = null; render(); },
     addPantryItem: function(){
       var raw = (ui.pantryInput || '').trim();
       if (!raw) return;
       var additions = raw.split(',').map(function(s){ return s.trim(); }).filter(Boolean);
-      var next = pantry.slice();
-      additions.forEach(function(item){
-        var exists = next.some(function(p){ return normalizePantryTerm(p) === normalizePantryTerm(item); });
-        if (!exists) next.push(item);
+      var next = pantry.slice(), added = 0;
+      additions.forEach(function(name){
+        if (pantryHas(name) || next.some(function(p){ return normalizePantryTerm(p.name) === normalizePantryTerm(name); })) return;
+        next.push({ name: name, section: 'other', low: false });
+        added++;
       });
-      ui.pantryInput = '';
+      ui.pantryInput = ''; ui.pantryAddNote = null;
       return savePantry(next).then(function(){
-        ui.toast = additions.length > 1 ? 'Added '+additions.length+' to the pantry' : 'Added to the pantry';
+        ui.toast = added ? (added > 1 ? 'Added '+added+' to the pantry' : 'Added to the pantry') : 'Already on the list';
         render();
         setTimeout(function(){ ui.toast = null; render(); }, 1600);
       }).catch(reportActionError);
     },
+    // The same box, but Claude splits and files it. Anything it returns that
+    // wasn't in what they typed is dropped: a pantry that quietly grows items
+    // nobody bought is worse than one that needs a bit of typing.
+    addPantryWithAi: async function(){
+      var raw = (ui.pantryInput || '').trim();
+      if (!raw || !sampleFn || ui.pantrySortBusy) return;
+      ui.pantrySortBusy = true; ui.pantryAddNote = null; render();
+      try {
+        var result = await sampleFn.json(buildPantrySortPrompt(raw, pantryNames()));
+        var incoming = normalizePantryList(result && result.items);
+        var typed = normalizePantryTerm(raw);
+        var next = pantry.slice(), added = 0, ignored = 0, flagged = 0;
+        incoming.forEach(function(item){
+          var key = normalizePantryTerm(item.name);
+          // Every word of the entry has to appear in what they typed. Catches an
+          // invented "onions" while still allowing "toms" -> "tinned tomatoes".
+          var grounded = key.split(' ').some(function(w){ return w.length > 2 && typed.indexOf(w) !== -1; });
+          if (!grounded){ ignored++; return; }
+          var existing = next.filter(function(p){ return normalizePantryTerm(p.name) === key; })[0];
+          if (existing){
+            // Already on the list, but "we're nearly out of oil" is still news.
+            // Skipping the whole entry threw that away.
+            if (item.low && !existing.low){
+              next = next.map(function(p){ return p === existing ? Object.assign({}, p, { low: true }) : p; });
+              flagged++;
+            }
+            return;
+          }
+          next.push(item);
+          added++;
+        });
+        ui.pantrySortBusy = false;
+        if (!added && !flagged){
+          ui.pantryAddNote = ignored
+            ? 'Nothing added — what came back didn’t match what you typed. Try “Add plain”.'
+            : 'Nothing new there — it’s all on the list already.';
+          render();
+          return;
+        }
+        ui.pantryInput = '';
+        var bits = [];
+        if (added) bits.push('Added ' + added + ' item' + (added===1?'':'s') + ', filed by shelf.');
+        if (flagged) bits.push('Marked ' + flagged + ' as running low.');
+        if (ignored) bits.push('Left out ' + ignored + ' that didn’t match what you typed.');
+        ui.pantryAddNote = bits.join(' ');
+        await savePantry(next);
+        render();
+      } catch(e){
+        ui.pantrySortBusy = false;
+        ui.pantryAddNote = sampleErrorMessage(e) || 'Couldn’t sort that just now — “Add plain” still works.';
+        render();
+      }
+    },
     removePantryItem: function(el, id){
-      var next = pantry.filter(function(p){ return normalizePantryTerm(p) !== normalizePantryTerm(id); });
+      var name = decodeURIComponent(id || '');
+      var next = pantry.filter(function(p){ return normalizePantryTerm(p.name) !== normalizePantryTerm(name); });
       return savePantry(next).then(render).catch(reportActionError);
+    },
+    togglePantryLow: function(el, id){
+      var name = normalizePantryTerm(decodeURIComponent(id || ''));
+      var next = pantry.map(function(p){
+        return normalizePantryTerm(p.name) === name ? Object.assign({}, p, { low: !p.low }) : p;
+      });
+      return savePantry(next).then(render).catch(reportActionError);
+    },
+
+    pantryIdeas: async function(){
+      if (!sampleFn || ui.pantryIdeasBusy || !pantry.length) return;
+      ui.pantryIdeasBusy = true; ui.pantryIdeas = null; render();
+      try {
+        var result = await sampleFn.json(buildPantryIdeasPrompt(pantry, meals));
+        ui.pantryIdeasBusy = false;
+        ui.pantryIdeas = {
+          readyNow: Array.isArray(result && result.readyNow) ? result.readyNow : [],
+          almost:   Array.isArray(result && result.almost)   ? result.almost   : [],
+          ideas:    Array.isArray(result && result.ideas)    ? result.ideas    : []
+        };
+        render();
+      } catch(e){
+        ui.pantryIdeasBusy = false;
+        ui.pantryIdeas = { error: sampleErrorMessage(e) || 'Couldn’t come up with anything just now.' };
+        render();
+      }
+    },
+    clearPantryIdeas: function(){ ui.pantryIdeas = null; render(); },
+    // An idea is a name and a sentence, not a recipe. This opens the meal form
+    // with the name filled in and says so — the household still has to write
+    // the method, which is the only honest way to add it given the allergy list.
+    draftIdeaMeal: function(el, id){
+      var idea = ui.pantryIdeas && ui.pantryIdeas.ideas ? ui.pantryIdeas.ideas[parseInt(id, 10)] : null;
+      if (!idea) return;
+      resetAdjustState();
+      var m = blankMeal();
+      m.name = idea.name || '';
+      m.notes = 'Suggested from the pantry' + (idea.uses ? ' to use up ' + idea.uses : '') + '. ' +
+        'NOTHING HERE IS A REAL RECIPE YET — write the method and ingredients, and check them against the household rules before cooking.';
+      ui.formDraft = m;
+      ui.formOpen = true;
+      render();
     },
     // Estimating macros writes straight to the saved meal rather than opening
     // the form: the point is to see a number on a meal you already have, not to
@@ -3336,6 +3640,7 @@
       ui.importDataError = null;
       ui.importDataPreview = null;
       ui.confirmImportReplace = false;
+      render();
     },
     previewImportData: function(){
       ui.importDataError = null; ui.importDataPreview = null; ui.confirmImportReplace = false;
@@ -3370,7 +3675,7 @@
         var addedPantry = 0;
         var nextPantry = pantry.slice();
         p.pantry.forEach(function(item){
-          var exists = nextPantry.some(function(x){ return normalizePantryTerm(x) === normalizePantryTerm(item); });
+          var exists = nextPantry.some(function(x){ return normalizePantryTerm(x.name) === normalizePantryTerm(item.name); });
           if (!exists){ nextPantry.push(item); addedPantry++; }
         });
         if (addedPantry) await savePantry(nextPantry);
@@ -3672,7 +3977,7 @@
 
       ui.pantryChecking = true; ui.pantryCheckNote = null; render();
       try {
-        var result = await sampleFn.json(buildPantryMatchPrompt(pantry, names));
+        var result = await sampleFn.json(buildPantryMatchPrompt(pantryNames(), names));
         var known = {};
         names.forEach(function(n){ known[normalizePantryTerm(n)] = n; });
 
@@ -3727,12 +4032,20 @@
       return updateWeek({ pantryOverrides: overrides });
     },
     // From a grocery row: "we've already got this" without leaving the list.
-    addGroceryItemToPantry: function(el, id){
+    addGroceryItemToPantry: function(el, id, extra, e){
       var item = decodeURIComponent(id || '');
       if (!item) return;
-      var exists = pantry.some(function(p){ return normalizePantryTerm(p) === normalizePantryTerm(item); });
-      if (exists) return;
-      return savePantry(pantry.concat([item])).then(function(){
+      if (pantryHas(item)) return;
+      // The grocery row already knows which aisle it came from, so carry that
+      // across rather than dumping everything into "Everything else".
+      var section = 'other';
+      var row = el && el.closest ? el.closest('.g-section') : null;
+      if (row){
+        var heading = row.querySelector('h3');
+        var label = heading ? heading.textContent.replace(/\d+$/, '').trim() : '';
+        SECTIONS.forEach(function(sec){ if (SECTION_LABELS[sec] === label) section = sec; });
+      }
+      return savePantry(pantry.concat([{ name: item, section: section, low: false }])).then(function(){
         ui.toast = '“'+item+'” moved to the pantry';
         render();
         setTimeout(function(){ ui.toast = null; render(); }, 1800);

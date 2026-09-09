@@ -1,6 +1,6 @@
 # Tests
 
-Twelve Playwright suites drive the real page in Chromium with `window.claude`
+Thirteen Playwright suites drive the real page in Chromium with `window.claude`
 stubbed, so the app runs in its localStorage mode and `sample` returns a canned
 response. They exist because reading this code repeatedly produced fixes that
 looked right and weren't; every suite below started as a bug that inspection
@@ -16,6 +16,7 @@ missed.
 | `week-detail` | Per-slot macros, the per-meal breakdown table, targets, the inline "tweak" editor (including that Cancel cancels and 0 servings is refused), and pantry coverage per recipe. |
 | `grocery-filter` | Filtering the list to one meal rebuilds it from that meal, so garlic reads 3 cloves and not the week's 5. |
 | `grocery-page` | The list on its own tab; a tick survives an item moving between the buy list and the cupboard; copy skips ticked items; a new week drops last week's pantry guesses but keeps learned wording. |
+| `pantry` | The rebuilt pantry: old plain-string lists still read, an AI add never invents an item nobody typed, saying you're low on something already listed flags it rather than being skipped as a duplicate, and "what can we make" offers ready-now, almost, and fresh ideas. |
 | `selfhost` | The Supabase path with a stubbed client: nothing renders until you are signed in AND in a household, joins go through the RPC rather than a raw insert, writes carry `household_id` and land as jsonb, and a backend that can't be reached falls back to this device loudly instead of showing a blank page. |
 | `backup` | Export/import: a snapshot round-trips without loss, merge never overwrites what's in front of you, importing the same backup twice doesn't double anything, and a backup from a newer schema is refused rather than half-read. |
 | `cook-checklist` | Cook mode's per-step ingredient checklist, above all the matching: "add the butter beans" must not pull in dairy butter, "melt the butter, then add the butter beans" must show both, and "bring to the boil" must not match olive oil. |
