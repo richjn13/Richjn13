@@ -49,6 +49,9 @@ const rowFor = (page, name) => page.locator('.g-item', { hasText: name }).first(
 
   await page.goto('file://' + OUT);
   await page.waitForTimeout(500);
+  // The grocery list lives on its own tab now.
+  await page.click('button.tab:has-text("Grocery")');
+  await page.waitForTimeout(250);
 
   // --- unfiltered: combined totals, one chip per meal ---
   check('a chip per meal plus Everything', await page.locator('.g-chip').count(), 4);
@@ -94,9 +97,13 @@ const rowFor = (page, name) => page.locator('.g-item', { hasText: name }).first(
   const buyCard = (await page.locator('.card', { hasText: 'To buy' }).first().innerText()).toLowerCase();
   check('all-in-cupboard meal says so', buyCard.indexOf('all in the cupboard already') !== -1, true);
 
-  // --- "what's missing" on a week slot drives the same filter ---
+  // --- "what's missing" on a week slot jumps to the list, already filtered ---
+  await page.click('button.tab:has-text("This Week")');
+  await page.waitForTimeout(250);
+  check('the week page no longer carries the list itself', await page.locator('.g-item').count(), 0);
   await page.locator('.slot-wrap', { hasText: 'Curry' }).first().locator('button:has-text("what’s missing")').click();
   await page.waitForTimeout(400);
+  check('slot link lands on the grocery tab', await page.locator('button.tab.active').innerText(), 'Grocery (3)');
   check('slot link filters to that meal', (await page.locator('.g-chip.on').innerText()).replace(/\s+/g,' ').trim(), 'Curry 2');
 
   // --- checking an item off survives the filter, since keys are stable ---

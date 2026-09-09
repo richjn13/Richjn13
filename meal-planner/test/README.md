@@ -1,26 +1,40 @@
 # Tests
 
-`edit-form.e2e.js` drives the real page in Chromium via Playwright, with
-`window.claude` stubbed so the app runs in its localStorage mode and `sample`
-returns a canned adjustment. It covers the failure modes that kept recurring by
-inspection alone:
+Eight Playwright suites drive the real page in Chromium with `window.claude`
+stubbed, so the app runs in its localStorage mode and `sample` returns a canned
+response. They exist because reading this code repeatedly produced fixes that
+looked right and weren't; every suite below started as a bug that inspection
+missed.
 
-- clicking a plain field inside the meal form must not save-and-close it
-- an AI adjustment must rewrite the **method** textarea, not just the ingredients
-- notes typed by hand survive an adjustment (the AI note is appended, not swapped in)
-- removing an ingredient row keeps it removed
-- "Mark cooked today" actually applies
-- saving persists what's on screen
+| Suite | What it pins down |
+| --- | --- |
+| `edit-form` | The meal form. Clicking a plain field must not save-and-close it; an AI adjustment must rewrite the **method**, not just the ingredients; hand-typed notes survive it; removing a row keeps it removed; save persists. |
+| `grocery-pantry` | One line per item with a combined total and per-recipe amounts underneath; the three pantry layers (override > literal > AI); "butter" must not match "butter beans". |
+| `merge-duplicates` | The AI tidy pass collapses garlic / garlic cloves and ginger / fresh ginger into one line and sums them, without swallowing things that merely sound alike. |
+| `macros` | The arithmetic: per serving × servings, summed across the week, averaged back. An adjustment that omits a value must not wipe it. |
+| `macro-estimate` | A meal with no macros still shows the section and offers to estimate; an estimate is labelled as one; typing over it clears that label. |
+| `week-detail` | Per-slot macros, the per-meal breakdown table, targets, the inline "tweak" editor (including that Cancel cancels and 0 servings is refused), and pantry coverage per recipe. |
+| `grocery-filter` | Filtering the list to one meal rebuilds it from that meal, so garlic reads 3 cloves and not the week's 5. |
+| `grocery-page` | The list on its own tab; a tick survives an item moving between the buy list and the cupboard; copy skips ticked items; a new week drops last week's pantry guesses but keeps learned wording. |
 
-These all share one mechanism: `render()` re-reads the form DOM back into the
-draft to protect in-progress typing, which silently reverted anything set
-programmatically until `renderFromDraft()` was introduced.
+The recurring theme in `edit-form` is one mechanism: `render()` re-reads the form
+DOM back into the draft to protect in-progress typing, which silently reverted
+anything set programmatically until `renderFromDraft()` was introduced. The same
+protection now covers the inline editors on This Week.
 
 ## Running
 
 ```
 npm install playwright-core
-node edit-form.e2e.js
+node edit-form.e2e.js      # or any other suite
 ```
 
-Point `executablePath` at a Chromium build if `/opt/pw-browsers` isn't present.
+Each suite is standalone and exits non-zero on failure. Point `executablePath`
+at a Chromium build if `/opt/pw-browsers` isn't present.
+
+## Writing a new one
+
+Seed `localStorage` in `page.addInitScript` and stub `window.claude.use` to
+return a fixed `sample`. Assert against rendered text and against what actually
+landed in `localStorage` — several real bugs looked correct on screen and wrote
+nothing, or wrote to a store the page never read back.

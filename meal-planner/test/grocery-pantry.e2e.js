@@ -55,6 +55,9 @@ const rowFor = (page, name) => page.locator('.g-item', { hasText: name }).first(
 
   await page.goto('file://' + OUT);
   await page.waitForTimeout(500);
+  // The grocery list lives on its own tab now.
+  await page.click('button.tab:has-text("Grocery")');
+  await page.waitForTimeout(250);
 
   // --- one line per item: name left, combined total right ---
   const garlic = rowFor(page, 'garlic');

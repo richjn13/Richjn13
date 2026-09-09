@@ -525,7 +525,7 @@
     weekPickerSearch: '',
     weekPickerFilterTier: '',
     mealsFilter: { tier:'', search:'', sort:'name' },
-    importRawText: '', importSourceUrl: '', importDraft: null, importExtracting:false, importError:null, importPdfReading:false,
+    importRawText: '', importSourceUrl: '', importExtracting:false, importError:null, importPdfReading:false,
     bulkRunning:false, bulkTotal:0, bulkDone:0, bulkFailed:[],
     adjustInstruction:'', adjusting:false, adjustError:null, adjustApplied:false,
     expandedMealId: null,
@@ -536,7 +536,7 @@
     formError: null,
     formSaving: false,
     linkUrl: '', linkDraft: false, linkSaving: false, linkError: null,
-    pantryInput: '', pantrySaving: false, pantryChecking: false, pantryCheckNote: null,
+    pantryInput: '', pantryChecking: false, pantryCheckNote: null,
     macroEstimating: null, macroError: null, macroErrorId: null, macroBulk: null,
     macroDetailOpen: false, macroTargetsOpen: false, targetsSaving: false, targetDraft: null,
     slotEdit: null, slotEditSaving: false, slotEditError: null,
@@ -636,7 +636,6 @@
     if (aiMatches[n]) return aiMatches[n];
     return null;
   }
-  function isInPantry(itemName){ return !!pantryMatchFor(itemName); }
   // Would literal matching alone have caught this? Used only to report how many
   // extra matches the AI pass actually contributed.
   function matchesLiterally(itemName){
@@ -942,10 +941,16 @@
       render();
     }
   }
-  function groceryCopyText(bySection, onlyBuy){
+  // Ticked items are left out: this text goes straight into a reminders list, and
+  // pasting things you've already picked up is worse than useless.
+  function groceryCopyText(bySection, onlyBuy, checked){
+    checked = checked || {};
     var lines = [];
     SECTIONS.forEach(function(s){
-      var items = bySection[s].filter(function(i){ return onlyBuy ? !i.pantryStaple : i.pantryStaple; });
+      var items = bySection[s].filter(function(i){
+        if (onlyBuy ? i.pantryStaple : !i.pantryStaple) return false;
+        return !isGroceryChecked(checked, groceryKey(s, i.item));
+      });
       if (!items.length) return;
       lines.push('-- '+SECTION_LABELS[s]+' --');
       items.forEach(function(item){
@@ -1248,6 +1253,7 @@
         return;
       }
       if (currentTab === 'week') html += renderWeekTab();
+      else if (currentTab === 'grocery') html += renderGroceryTab();
       else if (currentTab === 'meals') html += renderMealsTab();
       else if (currentTab === 'pantry') html += renderPantryTab();
       else if (currentTab === 'import') html += renderImportTab();
@@ -1288,7 +1294,7 @@
     return '' +
       '<div class="topbar"><div class="brand"><h1>Meal Planner</h1><span class="tag mono">household kitchen ops</span></div></div>' +
       '<div class="tabs">' +
-        tabBtn('week','This Week') + tabBtn('meals','Meals') + tabBtn('pantry','Pantry') + tabBtn('import','Import') +
+        tabBtn('week','This Week') + tabBtn('grocery', groceryTabLabel()) + tabBtn('meals','Meals') + tabBtn('pantry','Pantry') + tabBtn('import','Import') +
       '</div>' +
       (ui.actionError
         ? '<div class="warnbox warn" style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">' +
@@ -1366,9 +1372,40 @@
     }
 
     if (picked.length > 0){
-      html += renderGrocerySection(picked);
+      var buyCount = groceryBuyCount(picked);
+      html += '<div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">' +
+        '<div><strong>Grocery list</strong>' +
+          '<div class="muted">'+(buyCount ? buyCount+' thing'+(buyCount===1?'':'s')+' to buy for these '+picked.length+' meal'+(picked.length===1?'':'s')+'.' : 'Nothing to buy — it’s all in the cupboard.')+'</div>' +
+        '</div>' +
+        '<button class="btn btn-forest btn-sm" data-action="setTab" data-id="grocery">Open the list</button>' +
+      '</div>';
     }
     return html;
+  }
+
+  // How many distinct things are still to buy for these picks. Cheap enough to
+  // run on every render, and it's the one number worth putting on a tab.
+  function groceryBuyCount(picked){
+    var bySection = buildGroceryList(picked);
+    var n = 0;
+    SECTIONS.forEach(function(s){ bySection[s].forEach(function(i){ if (!i.pantryStaple) n++; }); });
+    return n;
+  }
+  function groceryTabLabel(){
+    var picked = selectedMeals();
+    if (!picked.length) return 'Grocery';
+    var n = groceryBuyCount(picked);
+    return n ? 'Grocery (' + n + ')' : 'Grocery';
+  }
+
+  function renderGroceryTab(){
+    var picked = selectedMeals();
+    if (!picked.length){
+      return '<div class="section-head"><h2>Grocery list</h2></div>' +
+        '<div class="empty-state">Nothing planned yet, so there’s nothing to buy.<br><br>' +
+        '<button class="btn btn-primary" data-action="setTab" data-id="week">Pick this week’s meals</button></div>';
+    }
+    return renderGrocerySection(picked);
   }
 
   // One line per item — name left, combined total right — with the per-recipe
@@ -1592,9 +1629,18 @@
       '</div>';
   }
 
-  function renderGroceryRow(item, section, listKind, checked){
-    var key = listKind+'|'+section+'|'+item.item.toLowerCase();
-    var isChecked = !!checked[key];
+  // The key deliberately leaves out which list the row is in. It used to include
+  // it, so marking something as a pantry staple moved the row from "to buy" to
+  // "check the cupboard" and silently lost the tick you'd already made on it.
+  function groceryKey(section, itemName){
+    return section + '|' + String(itemName || '').toLowerCase();
+  }
+  function isGroceryChecked(checked, key){
+    return !!(checked[key] || checked['buy|' + key] || checked['cupboard|' + key]);
+  }
+  function renderGroceryRow(item, section, checked){
+    var key = groceryKey(section, item.item);
+    var isChecked = isGroceryChecked(checked, key);
     return '<div class="g-item'+(isChecked?' checked':'')+'">' +
       '<input type="checkbox" data-action="toggleGroceryItem" data-id="'+encodeURIComponent(key)+'"'+(isChecked?' checked':'')+'>' +
       '<div class="g-body">' +
@@ -1648,7 +1694,7 @@
         '<button type="button" class="btn-link" data-action="setGroceryMeal" data-id="">Back to the whole week</button>' +
       '</div>';
     } else if (picked.length > 1){
-      html += '<p class="muted" style="margin:-6px 0 12px;">Amounts below are combined across all '+picked.length+' meals. Tap a meal to see just what that one needs.</p>';
+      html += '<p class="muted" style="margin:-6px 0 12px;">Combined across all '+picked.length+' meals. Tap one to see just what it needs.</p>';
     }
     return html;
   }
@@ -1670,6 +1716,7 @@
         '<button class="btn btn-ghost btn-sm" data-action="copyGrocery" data-id="cupboard">Copy cupboard-check</button>' +
       '</div></div>';
 
+    html += '<p class="muted" style="margin:-6px 0 12px;">Amounts are scaled so every meal makes 4 portions, whatever the recipe says it serves. Ticked items are left out when you copy.</p>';
     html += renderGroceryFilter(picked, only);
 
     if (ui.pantryCheckNote) html += '<div class="warnbox info">'+escapeHtml(ui.pantryCheckNote)+'</div>';
@@ -1688,7 +1735,7 @@
       var items = bySection[s].filter(function(i){ return !i.pantryStaple; });
       if (!items.length) return;
       html += '<div class="g-section"><h3>'+SECTION_LABELS[s]+'</h3>';
-      items.forEach(function(item){ html += renderGroceryRow(item, s, 'buy', checked); });
+      items.forEach(function(item){ html += renderGroceryRow(item, s, checked); });
       html += '</div>';
     });
     html += '</div>';
@@ -1699,7 +1746,7 @@
       var items = bySection[s].filter(function(i){ return i.pantryStaple; });
       if (!items.length) return;
       html += '<div class="g-section"><h3>'+SECTION_LABELS[s]+'</h3>';
-      items.forEach(function(item){ html += renderGroceryRow(item, s, 'cupboard', checked); });
+      items.forEach(function(item){ html += renderGroceryRow(item, s, checked); });
       html += '</div>';
     });
     html += '</div>';
@@ -2237,12 +2284,12 @@
     filterTier: function(el){ ui.mealsFilter.tier = el.value; render(); },
     filterSort: function(el){ ui.mealsFilter.sort = el.value; render(); },
 
-    startWeek: function(){ updateWeek({ weekStart: mondayIso(), mealIds: [null,null,null,null,null], checkedItems: {}, started: true }); },
+    startWeek: function(){ updateWeek({ weekStart: mondayIso(), mealIds: [null,null,null,null,null], checkedItems: {}, started: true, pantryOverrides: {}, pantryMatches: {} }); },
     askNewWeek: function(){ ui.confirmNewWeek = true; render(); },
     cancelNewWeek: function(){ ui.confirmNewWeek = false; render(); },
     confirmNewWeek: function(){
       ui.confirmNewWeek = false;
-      updateWeek({ weekStart: mondayIso(), mealIds: [null,null,null,null,null], checkedItems: {}, started: true });
+      updateWeek({ weekStart: mondayIso(), mealIds: [null,null,null,null,null], checkedItems: {}, started: true, pantryOverrides: {}, pantryMatches: {} });
     },
     autoPickWeek: function(){
       var hasExisting = getWeekIds().some(function(x){ return x; });
@@ -2289,16 +2336,21 @@
     toggleGroceryItem: function(el, id){
       var key = decodeURIComponent(id);
       var checked = Object.assign({}, (weekDoc && weekDoc.checkedItems) || {});
-      checked[key] = !checked[key];
+      var now = !isGroceryChecked(checked, key);
+      // Clear the pre-fix keys as we go, so a week saved by an older version
+      // converges instead of carrying two truths for the same item.
+      delete checked['buy|' + key];
+      delete checked['cupboard|' + key];
+      if (now) checked[key] = true; else delete checked[key];
       updateWeek({ checkedItems: checked });
     },
     copyGrocery: function(el, id){
       var picked = selectedMeals();
       var only = groceryFilterMeal(picked);
       var bySection = buildGroceryList(only ? [only] : picked);
-      var text = groceryCopyText(bySection, id === 'buy');
+      var text = groceryCopyText(bySection, id === 'buy', (weekDoc && weekDoc.checkedItems) || {});
       var label = id === 'buy' ? (only ? only.name + ' list' : 'Buy list') : 'Cupboard-check list';
-      copyText(text || 'Nothing here yet.', label);
+      copyText(text || 'Nothing left — everything on that list is ticked off.', label);
     },
     setGroceryMeal: function(el, id){
       ui.groceryMealFilter = id || null;
@@ -2309,6 +2361,7 @@
     // missing for Tuesday" is one tap rather than a scroll and a hunt.
     showMealShopping: function(el, id){
       ui.groceryMealFilter = id || null;
+      currentTab = 'grocery';
       ui.scrollToGrocery = true;
       render();
     },
