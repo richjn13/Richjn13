@@ -58,13 +58,12 @@ who isn't logged in, and rate-limit per user — an open proxy is someone else's
 free API key.
 
 **Running cost, honestly:** hosting free, Supabase free, and the AI is the only
-real variable. Anthropic bills per token; at Claude Opus 5 rates ($5 per million
-input tokens, $25 per million output) a recipe extraction is a fraction of a
-cent, and two people planning one week each is negligible — call it under a
-dollar a month. Bulk-importing a large PDF library is the only thing that would
-show up on a bill, and even then it's small. Sonnet 5 ($2/$10) or Haiku 4.5
-($1/$5) would cut it further if it ever mattered; it probably won't at this
-scale.
+real variable. Anthropic bills per token; on the default Sonnet 5 ($2 per
+million input tokens, $10 per million output) a recipe extraction is a fraction
+of a cent, and two people planning one week each is negligible — call it well
+under a dollar a month. Bulk-importing a large PDF library is the only thing
+that would show up on a bill, and even then it's small. `AI_MODEL` and
+`AI_MODEL_HEAVY` change which model answers without touching code.
 
 **Rough effort:** two to three days of focused work.
 

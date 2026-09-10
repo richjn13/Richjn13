@@ -106,6 +106,22 @@ repo:
 | `SUPABASE_URL` | Project Settings → API → Project URL | the function and the build |
 | `SUPABASE_ANON_KEY` | Project Settings → API → anon key | the function and the build |
 
+Two optional ones, if you want to change which model answers:
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `AI_MODEL` | `claude-sonnet-5` | Everything the app asks for |
+| `AI_MODEL_HEAVY` | same as `AI_MODEL` | Recipe adjustments and the assistant only |
+
+Sonnet 5 is the default at $2 / $10 per million tokens in and out. Opus 5 is
+$5 / $25 — the same work at a higher rate, not more of it. Haiku 4.5 at $1 / $5
+is cheaper again and fine for extraction, though it is the one likeliest to
+misread a scanned recipe.
+
+If the assistant starts guessing which meal you meant, or an adjustment comes
+back sloppy, set `AI_MODEL_HEAVY=claude-opus-5`. Only the two jobs that actually
+reason use it, so the extra cost lands where the judgement is needed.
+
 Both Supabase variables need to be available **at build time as well as at
 runtime** — the build writes them into `dist/config.js` for the browser. On
 Vercel that is the default; just don't restrict them to the function.

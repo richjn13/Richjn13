@@ -22,6 +22,10 @@
 //   SUPABASE_URL        e.g. https://abcdefgh.supabase.co
 //   SUPABASE_ANON_KEY   the anon/publishable key
 //
+// Optional:
+//   AI_MODEL            defaults to claude-sonnet-5
+//   AI_MODEL_HEAVY      used for recipe adjustments and the assistant only
+//
 // npm i @anthropic-ai/sdk @supabase/supabase-js
 
 import Anthropic from '@anthropic-ai/sdk';
@@ -31,8 +35,16 @@ export const config = { runtime: 'edge' };
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// The model the app's prompts were written and tested against.
-const MODEL = 'claude-opus-5';
+// Which model answers. Settable without touching this file: set AI_MODEL in the
+// host's environment. Sonnet 5 is the default — it is the same work at a lower
+// rate per token ($2/$10 per million against Opus 5's $5/$25), not less work.
+//
+// If the assistant starts guessing which meal you meant, or a method rewrite
+// comes back sloppy, set AI_MODEL_HEAVY=claude-opus-5. Only the two jobs that
+// actually reason — adjusting a recipe and the assistant — use it, so the cost
+// lands where the judgement is needed and nowhere else.
+const MODEL = process.env.AI_MODEL || 'claude-sonnet-5';
+const MODEL_HEAVY = process.env.AI_MODEL_HEAVY || MODEL;
 
 // Effort is the first lever on how long a request takes, and these jobs do not
 // all deserve the same amount of thinking. Pulling a recipe out of text that is
@@ -65,16 +77,17 @@ function rateLimited(userId: string): boolean {
 }
 
 type Effort = 'low' | 'medium' | 'high';
-const TASKS: Record<string, { effort: Effort; maxTokens: number }> = {
+type Task = { effort: Effort; maxTokens: number; heavy?: boolean };
+const TASKS: Record<string, Task> = {
   extract:     { effort: 'low',    maxTokens: 4000 },  // recipe out of PDF text
   linkDraft:   { effort: 'low',    maxTokens: 3000 },
   macros:      { effort: 'low',    maxTokens: 700  },
   pantrySort:  { effort: 'low',    maxTokens: 1500 },
   pantryMatch: { effort: 'low',    maxTokens: 3000 },  // tidy the grocery list
-  adjust:      { effort: 'medium', maxTokens: 6000 },  // rewrites a method
-  assistant:   { effort: 'medium', maxTokens: 6000 },  // must not guess a meal
+  adjust:      { effort: 'medium', maxTokens: 6000, heavy: true },  // rewrites a method
+  assistant:   { effort: 'medium', maxTokens: 6000, heavy: true },  // must not guess a meal
 };
-const DEFAULT_TASK = { effort: 'medium' as Effort, maxTokens: 4000 };
+const DEFAULT_TASK: Task = { effort: 'medium', maxTokens: 4000 };
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -147,10 +160,10 @@ export default async function handler(req: Request): Promise<Response> {
     // — which is what "taking too long to connect" was. Once bytes are
     // flowing the clock stops mattering.
     //
-    // No `thinking` parameter: Opus 5 runs adaptive thinking by default, and
-    // the older fixed-budget form is rejected on this model.
+    // No `thinking` parameter: both Sonnet 5 and Opus 5 run adaptive thinking
+    // when it is omitted, and the older fixed-budget form is rejected on each.
     const stream = anthropic.messages.stream({
-      model: MODEL,
+      model: task.heavy ? MODEL_HEAVY : MODEL,
       max_tokens: task.maxTokens,
       output_config: { effort: task.effort },
       messages: [{ role: 'user', content: prompt }],
