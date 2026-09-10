@@ -316,6 +316,21 @@
   .slot-empty-btn{ flex:1; border:2px dashed var(--line-strong); border-radius:10px; background:none; color:var(--ink-soft);
     padding:16px; cursor:pointer; text-align:center; font-size:0.85rem; font-weight:800; }
   .slot-empty-btn:hover{ border-color:var(--terracotta); color:var(--terracotta); }
+  .slot-stepper{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+    background:var(--card); border:1.5px solid var(--line); border-radius:12px;
+    padding:12px 16px; margin-bottom:14px; }
+  .hero .slot-stepper{ width:100%; max-width:340px; justify-content:center; gap:18px; margin:4px 0 2px; }
+  .slot-stepper-label{ font-size:0.62rem; text-transform:uppercase; letter-spacing:0.12em;
+    color:var(--ink-soft); font-weight:800; }
+  .stepper{ display:inline-flex; align-items:center; gap:4px; }
+  .step-btn{ width:38px; height:38px; border-radius:10px; border:1.5px solid var(--line-strong);
+    background:var(--card); color:var(--ink); font-size:1.15rem; font-weight:800; cursor:pointer;
+    display:inline-flex; align-items:center; justify-content:center; }
+  .step-btn:hover:not([disabled]){ border-color:var(--olive); color:var(--olive); }
+  .step-btn[disabled]{ opacity:0.3; cursor:default; }
+  .step-value{ min-width:2.2em; text-align:center; font-size:1.25rem; font-weight:900;
+    font-variant-numeric:tabular-nums; letter-spacing:-0.02em; }
+
   .loose-note{ font-size:0.82rem; color:var(--ink-soft); text-align:center; margin-bottom:18px; }
   .warnbox{ border-radius:12px; padding:13px 15px; margin-bottom:14px; font-size:0.85rem; border:1.5px solid transparent; font-weight:600; }
   .warnbox.warn{ background:var(--terracotta-tint); color:var(--terracotta); border-color:var(--terracotta); }
@@ -665,7 +680,7 @@
     adjustInstruction:'', adjusting:false, adjustError:null, adjustApplied:false,
     expandedMealId: null,
     confirmDeleteId: null,
-    confirmNewWeek: false,
+    confirmNewWeek: false, confirmSlots: null,
     confirmAutoPick: false,
     actionError: null,
     formError: null,
@@ -1155,18 +1170,22 @@
   // ---------- rules engine ----------
   function computeWarnings(selected){
     var warnings = [], infos = [];
-    if (selected.length < 5) warnings.push('Only '+selected.length+' of 5 picked so far.');
-    if (selected.length === 5){
+    var slots = weekSlots();
+    if (selected.length < slots) warnings.push('Only '+selected.length+' of '+slots+' picked so far.');
+    if (selected.length === slots && slots >= 3){
       var tierCounts = { often:0, sometimes:0, rarely:0, unranked:0 };
       selected.forEach(function(m){ tierCounts[m.tier||'unranked']++; });
       if ((tierCounts.rarely + tierCounts.unranked) === 0) warnings.push('Nothing from rarely or unranked this week — the list stops moving if it’s always the same meals.');
       if (tierCounts.often === 0) infos.push('No “often” meals this week — fine occasionally, worth noticing if it keeps happening.');
     }
     var longCooks = selected.filter(function(m){ return (parseFloat(m.effortMinutes)||0) >= 45; }).length;
-    if (longCooks >= 4) warnings.push('That’s '+longCooks+' long cooks this week — might be a lot on top of everything else.');
+    if (longCooks >= 4 && longCooks >= Math.ceil(slots * 0.6)) warnings.push('That’s '+longCooks+' long cooks this week — might be a lot on top of everything else.');
     var baseCounts = {};
     selected.forEach(function(m){ var b=(m.base||'').toLowerCase().trim(); if (!b) return; baseCounts[b]=(baseCounts[b]||0)+1; });
-    Object.keys(baseCounts).forEach(function(b){ if (baseCounts[b] >= 3) warnings.push('Three or more of these lean on '+b+' — want more variety?'); });
+    var baseLimit = Math.max(3, Math.ceil(slots * 0.5));
+    Object.keys(baseCounts).forEach(function(b){
+      if (baseCounts[b] >= baseLimit) warnings.push(baseCounts[b]+' of these lean on '+b+' — want more variety?');
+    });
     selected.forEach(function(m){
       var d = daysSince(m.lastCooked);
       if (m.tier === 'sometimes' && d < 24) warnings.push(escapeHtml(m.name)+' was cooked '+d+' day'+(d===1?'':'s')+' ago — sometimes meals are usually spaced about a month apart.');
@@ -1686,7 +1705,8 @@
     if (!meals.length) lines.push('- (no meals saved yet)');
 
     lines.push('');
-    lines.push('THIS WEEK: ' + (weekIds.length
+    lines.push('THIS WEEK is planning for ' + weekSlots() + ' dinner' + (weekSlots()===1?'':'s') + '.');
+    lines.push('PICKED SO FAR: ' + (weekIds.length
       ? weekIds.map(function(id){
           var m = meals.filter(function(x){ return x.id === id; })[0];
           return m ? m.name : id;
@@ -1716,6 +1736,7 @@
     '"quantity"?:string,"unit"?:string}\n' +
     '  {"type":"addMeal","name":string,"base"?:string,"servings"?:number,"method"?:string,' +
     '"ingredients"?:[{"item":string,"quantity"?:string,"unit"?:string}]}\n' +
+    '  {"type":"setWeekSlots","slots":number}   // how many dinners the week plans for, 1 to 10\n' +
     '  {"type":"addToWeek","mealId":"<id>"}\n' +
     '  {"type":"removeFromWeek","mealId":"<id>"}\n' +
     '  {"type":"addBuyItem","item":string,"quantity"?:string,"unit"?:string,"section"?:string}\n' +
@@ -1822,6 +1843,15 @@
           method: typeof a.method === 'string' ? a.method : '',
           ingredients: Array.isArray(a.ingredients) ? a.ingredients : [] };
       }
+      case 'setWeekSlots': {
+        var want = parseInt(a.slots, 10);
+        if (isNaN(want) || want < MIN_SLOTS || want > MAX_SLOTS || want === weekSlots()) return null;
+        var losing = getWeekIds().slice(want).filter(Boolean).map(function(mid){
+          var mm = findMealById(mid);
+          return mm ? mm.name : 'a meal';
+        });
+        return { type:'setWeekSlots', slots: want, from: weekSlots(), losing: losing };
+      }
       case 'addToWeek': {
         if (!meal) return null;
         if (getWeekIds().indexOf(meal.id) !== -1) return null;
@@ -1899,6 +1929,9 @@
           { label: 'Ingredients', after: a.ingredients.length ? a.ingredients.map(function(i){ return [i.quantity, i.unit, i.item].filter(Boolean).join(' '); }).join(', ') : '(none)' },
           { label: 'Method', after: a.method || '(none written)', long: true }
         ]};
+      case 'setWeekSlots': return { title: 'Plan for ' + a.slots + ' dinner' + (a.slots===1?'':'s') + ' this week',
+        fields: [{ label: 'Dinners', before: String(a.from), after: String(a.slots) }].concat(
+          a.losing.length ? [{ label: 'Drops', after: a.losing.join(', ') }] : []) };
       case 'addToWeek':    return { title: 'Add ' + a.meal.name + ' to this week', fields: [] };
       case 'removeFromWeek': return { title: 'Take ' + a.meal.name + ' out of this week', fields: [] };
       case 'addBuyItem':   return { title: 'Add to the buy list', fields: [{ label: 'Item', after: [a.quantity, a.unit, a.item].filter(Boolean).join(' ') }] };
@@ -1949,6 +1982,8 @@
         fresh.notes = 'Added by the assistant — check the method and ingredients before cooking it.';
         return saveMeal(fresh);
       }
+      case 'setWeekSlots':
+        return applyWeekSlots(a.slots);
       case 'addToWeek': {
         var ids = getWeekIds(); var slot = ids.indexOf(null);
         if (slot === -1) return;
@@ -2503,10 +2538,27 @@
   }
 
   // ---- Week tab ----
+  // How many dinners this week is planning for. Five was hardcoded in a dozen
+  // places; it lives here now and everything else asks.
+  var MIN_SLOTS = 1, MAX_SLOTS = 10, DEFAULT_SLOTS = 5;
+  function weekSlots(){
+    var n = parseInt(weekDoc && weekDoc.slots, 10);
+    if (isNaN(n)) return DEFAULT_SLOTS;
+    return Math.max(MIN_SLOTS, Math.min(MAX_SLOTS, n));
+  }
+  function emptySlots(n){
+    var out = [];
+    for (var i = 0; i < n; i++) out.push(null);
+    return out;
+  }
+  var NUMBER_WORDS = ['zero','one','two','three','four','five','six','seven','eight','nine','ten'];
+  function spell(n){ return NUMBER_WORDS[n] || String(n); }
+
   function getWeekIds(){
+    var n = weekSlots();
     var ids = (weekDoc && weekDoc.mealIds) ? weekDoc.mealIds.slice() : [];
-    while (ids.length < 5) ids.push(null);
-    return ids.slice(0,5);
+    while (ids.length < n) ids.push(null);
+    return ids.slice(0, n);
   }
   function selectedMeals(){
     return getWeekIds().map(function(id){ return id ? meals.find(function(m){ return m.id===id; }) : null; }).filter(Boolean);
@@ -2540,6 +2592,44 @@
     return entry;
   }
 
+  // Seven nights minus what you're cooking. The point of the original five was
+  // that two nights stay yours; that idea survives at any number, and stops
+  // being true past seven — which is worth saying rather than quietly implying
+  // you'll cook eleven dinners in a week.
+  function slotBlurb(n){
+    var spare = 7 - n;
+    if (n === 1) return 'One dinner planned. The other six nights are yours.';
+    if (spare > 0) return spell(n).charAt(0).toUpperCase() + spell(n).slice(1) +
+      ' dinners planned \u2014 that leaves ' + spell(spare) + ' night' + (spare === 1 ? '' : 's') + ' open, on purpose.';
+    if (spare === 0) return 'Seven dinners \u2014 every night of the week planned.';
+    return spell(n).charAt(0).toUpperCase() + spell(n).slice(1) + ' dinners \u2014 more than a week, so some of this is for the freezer or for later.';
+  }
+
+  function renderSlotStepper(){
+    var n = weekSlots();
+    var pending = ui.confirmSlots;
+    var html = '<div class="slot-stepper">' +
+      '<span class="slot-stepper-label">Dinners this week</span>' +
+      '<div class="stepper">' +
+        '<button type="button" class="step-btn" data-action="setWeekSlots" data-id="'+(n-1)+'"'+(n <= MIN_SLOTS ? ' disabled' : '')+' aria-label="One fewer">&minus;</button>' +
+        '<span class="step-value">'+n+'</span>' +
+        '<button type="button" class="step-btn" data-action="setWeekSlots" data-id="'+(n+1)+'"'+(n >= MAX_SLOTS ? ' disabled' : '')+' aria-label="One more">+</button>' +
+      '</div>' +
+    '</div>';
+    // Shrinking past a slot that already holds a meal loses that pick, so it
+    // says which one before doing it rather than after.
+    if (pending){
+      html += '<div class="warnbox warn slot-confirm"><strong>Going down to '+pending.next+' drops '+
+        (pending.names.length === 1 ? '' : 'these: ') + escapeHtml(pending.names.join(', ')) +
+        '.</strong> ' + (pending.names.length === 1 ? 'It stays' : 'They stay') + ' in your Meals list.' +
+        '<div class="row-actions" style="margin-top:10px;">' +
+          '<button type="button" class="btn btn-primary btn-sm" data-action="confirmWeekSlots">Yes, drop '+(pending.names.length === 1 ? 'it' : 'them')+'</button>' +
+          '<button type="button" class="btn-link" data-action="cancelWeekSlots">Cancel</button>' +
+        '</div></div>';
+    }
+    return html;
+  }
+
   function renderWeekTab(){
     var picked = selectedMeals();
     var html = '';
@@ -2552,16 +2642,17 @@
     }
     if (!weekDoc || !weekDoc.started){
       html += '<div class="card hero"><span class="eyebrow">'+ (weekDoc ? 're-up for next week' : 'new here') +'</span>' +
-        '<h2>Ready to plan this week’s five?</h2>' +
-        '<p>Pick five meals for the week. Two nights are always yours &mdash; takeout, leftovers, eating out, whatever’s easiest.</p>' +
-        '<div class="row-actions" style="justify-content:center;">' +
+        '<h2>How many dinners this week?</h2>' +
+        '<p>'+escapeHtml(slotBlurb(weekSlots()))+'</p>' +
+        renderSlotStepper() +
+        '<div class="row-actions" style="justify-content:center;margin-top:6px;">' +
           '<button class="btn btn-primary" data-action="startWeek">Let’s pick</button>' +
           '<button class="btn btn-ghost" data-action="autoPickWeek">Auto-pick for me</button>' +
         '</div></div>';
       return html;
     }
     var rules = computeWarnings(picked);
-    html += '<div class="section-head"><h2>This week’s five</h2>';
+    html += '<div class="section-head"><h2>This week&rsquo;s '+weekSlots()+'</h2>';
     if (ui.confirmNewWeek){
       html += '<span class="row-actions"><span class="muted">Clear this week’s picks?</span><button class="btn-link" data-action="confirmNewWeek">Yes, start fresh</button><button class="btn-link" data-action="cancelNewWeek">Cancel</button></span>';
     } else if (ui.confirmAutoPick){
@@ -2571,9 +2662,10 @@
         '<button class="btn btn-ghost btn-sm" data-action="askNewWeek">Start a new week</button></span>';
     }
     html += '</div>';
+    html += renderSlotStepper();
     html += '<div class="slots">';
     var weekIds = getWeekIds();
-    for (var i=0;i<5;i++){
+    for (var i=0;i<weekIds.length;i++){
       var mid = weekIds[i];
       var m = mid ? meals.find(function(x){ return x.id===mid; }) : null;
       if (m){
@@ -2583,7 +2675,7 @@
       }
     }
     html += '</div>';
-    html += '<div class="loose-note">Five dinners planned &mdash; that leaves 2 nights open, on purpose.</div>';
+    html += '<div class="loose-note">'+escapeHtml(slotBlurb(weekSlots()))+'</div>';
     html += renderWeekMacros(picked);
 
     if (rules.warnings.length){
@@ -3086,7 +3178,7 @@
       if (inWeek){
         html += '<button class="btn btn-ghost btn-sm" data-action="removeMealFromWeekById" data-id="'+m.id+'">Remove from week</button>';
       } else {
-        html += '<button class="btn btn-ghost btn-sm" data-action="addMealToWeek" data-id="'+m.id+'"'+(weekFull?' disabled title="This week already has 5 picks"':'')+'>'+(weekFull?'Week full':'+ Add to week')+'</button>';
+        html += '<button class="btn btn-ghost btn-sm" data-action="addMealToWeek" data-id="'+m.id+'"'+(weekFull?' disabled title="This week is already full"':'')+'>'+(weekFull?'Week full':'+ Add to week')+'</button>';
       }
       html += '<button class="btn btn-ghost btn-sm" data-action="openCook" data-id="'+m.id+'">Cook</button>' +
         '<button class="btn btn-ghost btn-sm" data-action="toggleMealView" data-id="'+m.id+'">'+(expanded?'Hide':'View')+'</button>' +
@@ -3681,6 +3773,16 @@
     ui.targetDraft = draft;
   }
 
+  function applyWeekSlots(next){
+    var ids = getWeekIds().slice(0, next);
+    while (ids.length < next) ids.push(null);
+    return updateWeek({
+      slots: next,
+      mealIds: ids,
+      weekStart: (weekDoc && weekDoc.weekStart) || mondayIso()
+    });
+  }
+
   // Filing the outgoing week has to happen BEFORE the picks are cleared, and the
   // reset has to happen even if filing fails — otherwise a storage hiccup leaves
   // you unable to start a new week at all, which is worse than a missing entry.
@@ -3693,7 +3795,8 @@
     }
     await updateWeek({
       weekStart: mondayIso(),
-      mealIds: [null,null,null,null,null],
+      mealIds: emptySlots(weekSlots()),
+      slots: weekSlots(),
       checkedItems: {}, cooked: {}, extraItems: [],
       pantryOverrides: {}, pantryMatches: {},
       started: true
@@ -3758,6 +3861,33 @@
     filterTier: function(el){ ui.mealsFilter.tier = el.value; render(); },
     filterSort: function(el){ ui.mealsFilter.sort = el.value; render(); },
 
+    setWeekSlots: function(el, id){
+      var next = Math.max(MIN_SLOTS, Math.min(MAX_SLOTS, parseInt(id, 10)));
+      if (isNaN(next) || next === weekSlots()) return;
+      ui.confirmSlots = null;
+      var ids = getWeekIds();
+      // Growing is free. Shrinking may throw away picks, so name them first.
+      if (next < ids.length){
+        var losing = ids.slice(next).filter(Boolean).map(function(mid){
+          var m = meals.filter(function(x){ return x.id === mid; })[0];
+          return m ? m.name : 'a meal';
+        });
+        if (losing.length){
+          ui.confirmSlots = { next: next, names: losing };
+          render();
+          return;
+        }
+      }
+      return applyWeekSlots(next);
+    },
+    confirmWeekSlots: function(){
+      var pending = ui.confirmSlots;
+      if (!pending) return;
+      ui.confirmSlots = null;
+      return applyWeekSlots(pending.next);
+    },
+    cancelWeekSlots: function(){ ui.confirmSlots = null; render(); },
+
     startWeek: function(){ return archiveAndResetWeek(); },
     askNewWeek: function(){ ui.confirmNewWeek = true; render(); },
     cancelNewWeek: function(){ ui.confirmNewWeek = false; render(); },
@@ -3770,9 +3900,10 @@
       if (hasExisting && !ui.confirmAutoPick){ ui.confirmAutoPick = true; render(); return; }
       ui.confirmAutoPick = false;
       if (!meals.length){ render(); return; }
-      var picks = weightedPickWithoutReplacement(meals, Math.min(5, meals.length));
+      var slots = weekSlots();
+      var picks = weightedPickWithoutReplacement(meals, Math.min(slots, meals.length));
       var ids = picks.map(function(m){ return m.id; });
-      while (ids.length < 5) ids.push(null);
+      while (ids.length < slots) ids.push(null);
       updateWeek({ mealIds: ids, weekStart: (weekDoc && weekDoc.weekStart) || mondayIso(), started: true });
     },
     cancelAutoPick: function(){ ui.confirmAutoPick = false; render(); },
