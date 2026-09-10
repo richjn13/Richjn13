@@ -6,6 +6,24 @@ can do, in the order they have to happen.
 
 Budget about an hour, most of it waiting for dashboards.
 
+## What you need before you start
+
+Three free accounts, and nothing else:
+
+- **Supabase** — the database and the logins.
+- **Vercel** — serves the page and runs the one function. It gives you a URL
+  like `meal-planner-xyz.vercel.app` when you import the repo. That URL *is*
+  your site.
+- **Anthropic** — an API key for the AI features. This is the only one that
+  costs anything, and at two people planning a week it is pennies a month.
+
+**You do not need to buy a domain or already own a website.** The page has to be
+served from somewhere because a browser loads it over the web, and Vercel is
+that somewhere, for free. A custom domain is optional and purely cosmetic — add
+one later if you want `meals.something.com` instead.
+
+Supabase on its own is not enough: it holds the data but does not serve the app.
+
 ---
 
 ## Before anything
@@ -23,8 +41,10 @@ as long as you have that.
    creates the tables, the household model, the row-level security policies and
    the three functions that let someone join a household.
 3. **Authentication → Providers:** make sure Email is on.
-4. **Authentication → URL Configuration:** once you know your site URL (step 3
-   below), add it to *Site URL* and *Redirect URLs*.
+4. **Authentication → URL Configuration:** leave this until after step 3, when
+   Vercel has given you a URL. Then paste that URL into *Site URL* and add it to
+   *Redirect URLs*. This is the only place the two services need to know about
+   each other, and it is why the deploy has to come first.
 5. **Project Settings → API:** copy the **Project URL** and the **anon /
    publishable key**.
 
@@ -55,7 +75,8 @@ is the failure that looks like success.
 **Vercel** is the documented path: a static site plus one function, free at this
 size, and `vercel.json` is already in the repo.
 
-1. Import the GitHub repo at vercel.com.
+1. Import the GitHub repo at vercel.com. It creates the URL for you — nothing
+   to buy, no DNS to set up.
 2. **Root Directory: `meal-planner`.** This matters — the repo has other things
    in it. Everything else (build command, output directory) comes from
    `vercel.json`.
@@ -96,6 +117,9 @@ output). Two people planning a week each is well under a dollar a month.
 Bulk-importing a large PDF library is the only thing that would register at all.
 If it ever matters, change `MODEL` in `api/ai.ts` to `claude-sonnet-5` ($2/$10)
 or `claude-haiku-4-5` ($1/$5).
+
+Once it deploys, go back and finish Supabase step 1.4 with the URL Vercel gave
+you. Sign-in will not work until you do.
 
 ## 5. Check the security model (optional, 2 minutes)
 
