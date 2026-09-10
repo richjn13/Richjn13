@@ -29,12 +29,6 @@ const SORT_REPLY = { items: [
   { name:'onions',          section:'produce',            low:false }  // never typed — must be dropped
 ]};
 
-const IDEAS_REPLY = {
-  readyNow: [ { name:'Traybake', note:'Everything for it is in the house.' } ],
-  almost:   [ { name:'Curry', missing:['coconut milk'] } ],
-  ideas:    [ { name:'Tomato Rice', uses:'tinned tomatoes, basmati rice', note:'One pan, twenty minutes.' } ]
-};
-
 let failures = 0;
 function check(name, got, want){
   const ok = got === want;
@@ -130,40 +124,12 @@ async function boot(page, reply){
   await page.waitForTimeout(500);
   check('plain add takes them as typed',
     await page.evaluate(() => JSON.parse(localStorage.getItem('mp_pantry_v1')).some(p => p.name === 'sea salt')), true);
+
+  // "What can we make?" lived on this tab and was replaced by the assistant
+  // bubble, which can act on the pantry rather than only talk about it. Its
+  // behaviour is covered by assistant.e2e.js.
+  check('the removed feature is gone', await page.locator('button:has-text("What can we make?")').count(), 0);
   await page.close();
-
-  // ---------------------------------------------------------- what can we make
-  page = await browser.newPage();
-  page.on('pageerror', e => { console.log('PAGE ERROR:', e.message); failures++; });
-  await boot(page, IDEAS_REPLY);
-
-  await page.click('button:has-text("What can we make?")');
-  await page.waitForTimeout(700);
-  const panel = page.locator('.card', { hasText: 'What you could make' }).first();
-  const text = (await panel.innerText()).replace(/\s+/g,' ');
-  check('a ready-now meal is named', text.indexOf('Traybake') !== -1, true);
-  check('an almost-there meal says what is missing', text.indexOf('Needs coconut milk') !== -1, true);
-  check('a fresh idea is offered', text.indexOf('Tomato Rice') !== -1, true);
-  check('and says what it would use up', text.indexOf('tinned tomatoes, basmati rice') !== -1, true);
-  check('it admits it is not a stock take', text.toLowerCase().indexOf('suggestions, not a stock take') !== -1, true);
-
-  // A ready-now meal that exists can be cooked straight from here.
-  check('ready-now offers to cook it', await panel.locator('button:has-text("Cook it")').count(), 1);
-  await panel.locator('button:has-text("Cook it")').click();
-  await page.waitForTimeout(400);
-  check('and cook mode opens on the right meal',
-    (await page.locator('.cook-name').innerText()).trim(), 'Traybake');
-  await page.click('.close-x');
-  await page.waitForTimeout(300);
-
-  // An idea becomes a draft meal, clearly labelled as not-a-recipe.
-  await page.click('button:has-text("Add it to Meals")');
-  await page.waitForTimeout(400);
-  check('the meal form opens', await page.locator('#form-overlay').count(), 1);
-  check('with the idea\'s name', await page.inputValue('#f-name'), 'Tomato Rice');
-  const notes = await page.inputValue('#f-notes');
-  check('and a warning that it is not a recipe yet', notes.indexOf('NOTHING HERE IS A REAL RECIPE YET') !== -1, true);
-  check('saying what it was meant to use up', notes.indexOf('tinned tomatoes') !== -1, true);
 
   await browser.close();
   console.log(failures ? `\n${failures} FAILURE(S)` : '\nALL PASS');

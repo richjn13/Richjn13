@@ -143,13 +143,6 @@
   /* the shelf heading carries its own count, right-aligned like the grocery list */
   .g-section h3 .muted{ font-size:0.68rem; font-weight:800; }
 
-  /* pantry ideas */
-  .idea-list{ list-style:none; margin:0; padding:0; }
-  .idea{ padding:10px 0; border-bottom:1px solid var(--line); }
-  .idea:last-child{ border-bottom:none; }
-  .idea-head{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; font-size:0.95rem; }
-  .idea.ready .idea-head strong{ color:var(--olive); }
-  .idea .g-meta{ margin-top:3px; }
   .have-it-btn{ margin-top:5px; font-size:0.74rem; }
 
   /* form */
@@ -350,10 +343,71 @@
   .breakdown-list li{ margin-bottom:1px; }
   .bd-qty{ display:inline-block; min-width:4.5em; font-variant-numeric:tabular-nums; font-weight:700; }
   .g-flag{ font-size:0.76rem; color:var(--danger); margin-top:3px; font-weight:700; }
-  .toast{ position:fixed; bottom:22px; left:50%; transform:translateX(-50%); background:var(--olive); color:var(--olive-ink);
+  .toast{ position:fixed; bottom:92px; left:50%; transform:translateX(-50%); background:var(--olive); color:var(--olive-ink);
     padding:11px 20px; border-radius:999px; font-size:0.85rem; font-weight:800; box-shadow:var(--shadow-lift); z-index:50; }
   .copy-fallback textarea{ width:100%; min-height:120px; margin-top:8px; border:1.5px solid var(--line-strong);
     border-radius:9px; padding:9px; background:var(--card); color:var(--ink); font-family:"JetBrains Mono", monospace; font-size:0.78rem; }
+
+  /* assistant */
+  .asst-bubble{ position:fixed; right:18px; bottom:calc(18px + env(safe-area-inset-bottom)); z-index:40;
+    display:inline-flex; align-items:center; gap:9px; background:var(--olive); color:var(--olive-ink);
+    border:none; border-radius:999px; padding:14px 20px 14px 17px; font-size:0.9rem; font-weight:800;
+    letter-spacing:-0.01em; cursor:pointer; box-shadow:var(--shadow-lift); }
+  .asst-bubble:hover{ filter:brightness(1.1); }
+  .asst-bubble-icon{ font-size:1.05rem; line-height:1; }
+
+  .asst-panel{ position:fixed; z-index:41; background:var(--card); display:flex; flex-direction:column;
+    border:1.5px solid var(--line-strong); box-shadow:var(--shadow-lift);
+    right:0; left:0; bottom:0; top:0; border-radius:0; }
+  @media (min-width:640px){
+    .asst-panel{ right:18px; left:auto; bottom:18px; top:auto; width:420px; max-height:min(640px, 82vh);
+      border-radius:16px; }
+  }
+  .asst-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex:none;
+    padding:16px 18px 13px; border-bottom:1.5px solid var(--line); }
+  .asst-title{ font-size:1.02rem; font-weight:900; letter-spacing:-0.02em; }
+  .asst-sub{ font-size:0.76rem; color:var(--ink-soft); font-weight:600; margin-top:2px; }
+  .asst-body{ flex:1; overflow-y:auto; padding:16px 18px; display:flex; flex-direction:column; gap:10px; }
+  .asst-empty .muted{ font-size:0.82rem; margin-bottom:6px; }
+  .asst-eg{ margin:0; padding-left:18px; font-size:0.84rem; color:var(--ink-soft); font-weight:600; }
+  .asst-eg li{ margin-bottom:5px; }
+  .asst-msg{ font-size:0.9rem; font-weight:600; line-height:1.5; padding:10px 13px; border-radius:13px; max-width:88%; }
+  .asst-msg.from-you{ align-self:flex-end; background:var(--olive); color:var(--olive-ink); border-bottom-right-radius:4px; }
+  .asst-msg.from-ai{ align-self:flex-start; background:var(--neutral-tint); color:var(--ink); border-bottom-left-radius:4px; }
+  .asst-thinking{ color:var(--ink-soft); }
+  .asst-question{ align-self:flex-start; font-size:0.9rem; font-weight:800; color:var(--navy);
+    background:var(--navy-tint); border-radius:13px; padding:10px 13px; max-width:88%; }
+  .asst-options{ display:flex; flex-wrap:wrap; gap:7px; }
+  .asst-foot{ flex:none; display:flex; gap:8px; padding:12px 14px calc(14px + env(safe-area-inset-bottom));
+    border-top:1.5px solid var(--line); }
+  .asst-foot input{ flex:1; min-width:0; border:1.5px solid var(--line-strong); background:var(--card);
+    color:var(--ink); border-radius:10px; padding:11px 12px; font-size:0.9rem; font-weight:600; }
+
+  /* the confirm step */
+  .asst-pending{ border:1.5px solid var(--olive); border-radius:13px; padding:13px; background:var(--card); }
+  .asst-pending-head{ font-size:0.68rem; text-transform:uppercase; letter-spacing:0.12em; font-weight:800;
+    color:var(--olive); margin-bottom:10px; }
+  .asst-change{ border-top:1px solid var(--line); padding:10px 0; }
+  .asst-change:first-of-type{ border-top:none; padding-top:0; }
+  .asst-change.off{ opacity:0.42; }
+  .asst-change-head{ display:flex; align-items:flex-start; gap:10px; font-size:0.9rem; font-weight:800;
+    cursor:pointer; }
+  .asst-change-head input{ width:20px; height:20px; flex:none; margin-top:1px; accent-color:var(--olive); }
+  .asst-field{ margin:8px 0 0 30px; }
+  .asst-field-label{ display:block; font-size:0.58rem; text-transform:uppercase; letter-spacing:0.1em;
+    color:var(--ink-soft); font-weight:800; margin-bottom:3px; }
+  .asst-inline{ font-size:0.86rem; font-weight:600; }
+  .asst-inline s{ color:var(--ink-soft); }
+  .asst-before, .asst-after{ display:flex; gap:8px; align-items:flex-start; margin-top:4px; }
+  .asst-tag{ flex:none; font-size:0.55rem; text-transform:uppercase; letter-spacing:0.1em; font-weight:800;
+    border-radius:999px; padding:3px 7px; margin-top:2px; }
+  .asst-before .asst-tag{ background:var(--neutral-tint); color:var(--ink-soft); }
+  .asst-after .asst-tag{ background:var(--olive-tint); color:var(--olive); }
+  .asst-before pre, .asst-after pre{ margin:0; white-space:pre-wrap; font-family:inherit; font-size:0.82rem;
+    font-weight:600; line-height:1.45; max-height:190px; overflow-y:auto; }
+  .asst-before pre{ color:var(--ink-soft); }
+  .asst-pending-foot{ display:flex; justify-content:flex-end; gap:8px; margin-top:12px;
+    padding-top:12px; border-top:1.5px solid var(--line); }
 
   .footnote{ margin-top:30px; text-align:center; font-size:0.75rem; color:var(--ink-soft); }
 </style>
@@ -618,7 +672,7 @@
     formSaving: false,
     linkUrl: '', linkDraft: false, linkSaving: false, linkError: null,
     pantryInput: '', pantryChecking: false, pantryCheckNote: null,
-    pantrySortBusy: false, pantryAddNote: null, pantryIdeas: null, pantryIdeasBusy: false,
+    pantrySortBusy: false, pantryAddNote: null,
     macroEstimating: null, macroError: null, macroErrorId: null, macroBulk: null,
     macroDetailOpen: false, macroTargetsOpen: false, targetsSaving: false, targetDraft: null,
     slotEdit: null, slotEditSaving: false, slotEditError: null,
@@ -626,6 +680,7 @@
     cook: null, cookSaving: false, cookError: null,
     authMode: 'signin', authEmail: '', authBusy: false, authFormError: null, authNotice: null,
     householdName: '', joinCode: '', inviteCode: null,
+    asst: { open:false, busy:false, input:'', messages:[], pending:null, error:null },
     exportOpen: false, importDataText: '', importDataError: null, importDataPreview: null,
     importDataSaving: false, confirmImportReplace: false,
     confirmDeleteHistoryId: null,
@@ -1175,6 +1230,18 @@
     return normalizePantryTerm(base).split(' ').map(singulariseWord).join(' ');
   }
 
+  function weekExtras(){
+    var list = (weekDoc && Array.isArray(weekDoc.extraItems)) ? weekDoc.extraItems : [];
+    return list.filter(function(x){ return x && x.item; }).map(function(x){
+      return {
+        item: String(x.item),
+        quantity: x.quantity != null ? String(x.quantity) : '',
+        unit: typeof x.unit === 'string' ? x.unit : '',
+        section: SECTIONS.indexOf(x.section) !== -1 ? x.section : 'other'
+      };
+    });
+  }
+
   function buildGroceryList(selected){
     var combined = {};
     selected.forEach(function(m){
@@ -1220,6 +1287,28 @@
         }
       });
     });
+    // Only on the full list — filtering to one meal is asking what THAT recipe
+    // needs, and a one-off item belongs to no recipe.
+    if (!ui.groceryMealFilter){
+      weekExtras().forEach(function(x){
+        var key = canonicalItemKey(x.item);
+        if (!key) return;
+        if (!combined[key]){
+          combined[key] = {
+            item: x.item, variants: [x.item], unitTotals: {}, rawParts: [], meals: [], breakdown: [],
+            section: x.section, pantryStaple: false, flag: autoFlagIngredient(x.item) ? autoFlagIngredient(x.item).flag : null,
+            substitute: '', extra: true
+          };
+        }
+        var c = combined[key];
+        c.extra = true;
+        var unit = String(x.unit || '').trim();
+        var qn = parseFloat(x.quantity);
+        if (x.quantity !== '' && !isNaN(qn)) c.unitTotals[unit] = (c.unitTotals[unit] || 0) + qn;
+        else if (x.quantity) c.rawParts.push(x.quantity + (unit ? ' ' + unit : ''));
+        c.breakdown.push({ meal: 'Added by hand', num: (isNaN(qn) ? null : qn), raw: (isNaN(qn) ? x.quantity : null), unit: unit });
+      });
+    }
     var bySection = {}; SECTIONS.forEach(function(s){ bySection[s] = []; });
     Object.keys(combined).forEach(function(k){
       var item = combined[k];
@@ -1468,38 +1557,6 @@
       + '{ "items": [ { "name": string, "section": string, "low": boolean } ] }';
   }
 
-  // "What can we make?" — matched against their own saved meals first, because
-  // a meal already in the list comes with a method, macros and the household's
-  // allergen work already done. Fresh ideas come last and are labelled as
-  // starting points, never as vetted recipes.
-  function buildPantryIdeasPrompt(pantryItems, mealList){
-    var shelves = pantryItems.map(function(p){
-      return '- ' + p.name + (p.low ? ' (running low)' : '');
-    }).join('\n');
-    var saved = mealList.slice(0, 60).map(function(m){
-      var ings = (m.ingredients || []).map(function(i){ return i.item; }).filter(Boolean).join(', ');
-      return '- ' + m.name + (ings ? ' — needs: ' + ings : '');
-    }).join('\n');
-
-    return 'A household wants to know what they can cook from what is in the house.\n\n'
-      + HOUSEHOLD_RULES_TEXT + ' Never suggest anything that breaks one of these, and never suggest a '
-      + 'substitution that reintroduces one.\n\n'
-      + 'In the house:\n' + (shelves || '- (nothing)') + '\n\n'
-      + 'Their saved meals:\n' + (saved || '- (none)') + '\n\n'
-      + 'Assume they also have salt, pepper and cooking oil. Assume nothing else.\n\n'
-      + 'Three answers, in this order of usefulness:\n'
-      + '1. readyNow — saved meals they could cook TONIGHT with what is listed. Use the meal name EXACTLY as '
-      + 'written above. Be strict: if a main component is missing, it does not belong here.\n'
-      + '2. almost — saved meals missing only one or two things, with exactly what is missing. Same exact names.\n'
-      + '3. ideas — at most four dishes NOT in their list that would use up what they have, especially anything '
-      + 'marked running low. Say briefly which pantry items each one uses.\n\n'
-      + 'If a section has nothing worth putting in it, return an empty array for it rather than padding it.\n\n'
-      + 'Reply with ONLY this JSON:\n'
-      + '{ "readyNow": [ { "name": "<exact saved meal name>", "note": "<short, optional>" } ], '
-      + '"almost": [ { "name": "<exact saved meal name>", "missing": ["<item>"] } ], '
-      + '"ideas": [ { "name": string, "uses": "<pantry items it uses>", "note": "<one line on what it is>" } ] }';
-  }
-
   function buildPantryMatchPrompt(pantryList, itemNames){
     var noMatchRule = 'Do NOT treat different ingredients as the same just because they sound alike or '
       + 'belong to the same family: butter is not butter beans, plain flour is not cornflour, white wine '
@@ -1588,6 +1645,341 @@
       + 'Requested change: ' + instruction + '\n\n'
       + 'Reply with ONLY a JSON object with exactly this shape, reflecting the FULL recipe after applying the change '
       + '(carry over any field the change does not affect unchanged, do not omit or shorten it):\n' + schema;
+  }
+
+  // ---------- the assistant ----------
+  //
+  // It proposes; it never writes. Everything it suggests comes back as a list
+  // of typed actions which are validated against real records here, shown as a
+  // plain-English change, and applied only when the household presses Apply.
+  // That ordering is the whole design: a model that can silently rewrite a
+  // method is a model that can silently rewrite an allergy note.
+
+  var ASSISTANT_MAX_TURNS = 8;
+
+  // What the model gets to see. Full methods only for the meals it plausibly
+  // needs — the week's picks and anything named in the message — because
+  // sending every method of forty meals is both slow and mostly noise.
+  function assistantContext(userText){
+    var lower = String(userText || '').toLowerCase();
+    var weekIds = getWeekIds().filter(Boolean);
+    var lines = [];
+
+    lines.push('MEALS (use the exact id when you act on one):');
+    meals.forEach(function(m){
+      var mentioned = m.name && lower.indexOf(m.name.toLowerCase()) !== -1;
+      var inWeek = weekIds.indexOf(m.id) !== -1;
+      var ings = (m.ingredients || []).map(function(i){
+        return [i.quantity, i.unit, i.item].filter(Boolean).join(' ');
+      }).filter(Boolean);
+      lines.push('- id=' + m.id + ' | ' + m.name +
+        ' | base: ' + (m.base || 'n/a') +
+        ' | serves ' + (parseFloat(m.servings) || 4) +
+        ' | rank: ' + (m.tier || 'unranked') +
+        (inWeek ? ' | IN THIS WEEK' : ''));
+      lines.push('    ingredients: ' + (ings.length ? ings.join('; ') : '(none listed)'));
+      if (mentioned || inWeek){
+        lines.push('    method: ' + (m.method ? m.method.replace(/\n/g, ' \\n ') : '(none written)'));
+        if (m.notes) lines.push('    notes: ' + m.notes);
+      }
+    });
+    if (!meals.length) lines.push('- (no meals saved yet)');
+
+    lines.push('');
+    lines.push('THIS WEEK: ' + (weekIds.length
+      ? weekIds.map(function(id){
+          var m = meals.filter(function(x){ return x.id === id; })[0];
+          return m ? m.name : id;
+        }).join(', ')
+      : '(nothing picked)'));
+
+    lines.push('');
+    lines.push('PANTRY: ' + (pantry.length
+      ? pantry.map(function(p){ return p.name + (p.low ? ' (low)' : ''); }).join(', ')
+      : '(empty)'));
+
+    var extras = weekExtras();
+    lines.push('EXTRA BUY-LIST ITEMS: ' + (extras.length
+      ? extras.map(function(x){ return [x.quantity, x.unit, x.item].filter(Boolean).join(' '); }).join(', ')
+      : '(none)'));
+
+    return lines.join('\n');
+  }
+
+  var ASSISTANT_ACTION_SCHEMA =
+    '  {"type":"updateMeal","mealId":"<id>","changes":{"name"?:string,"base"?:string,"servings"?:number,' +
+    '"tier"?:"often"|"sometimes"|"rarely"|"unranked","method"?:string,"notes"?:string}}\n' +
+    '  {"type":"addIngredient","mealId":"<id>","item":string,"quantity"?:string,"unit"?:string,' +
+    '"section"?:"produce"|"protein"|"dairy-and-chilled"|"tins-and-dry-goods"|"freezer"|"other"}\n' +
+    '  {"type":"removeIngredient","mealId":"<id>","item":"<exact existing item>"}\n' +
+    '  {"type":"updateIngredient","mealId":"<id>","item":"<exact existing item>","newItem"?:string,' +
+    '"quantity"?:string,"unit"?:string}\n' +
+    '  {"type":"addMeal","name":string,"base"?:string,"servings"?:number,"method"?:string,' +
+    '"ingredients"?:[{"item":string,"quantity"?:string,"unit"?:string}]}\n' +
+    '  {"type":"addToWeek","mealId":"<id>"}\n' +
+    '  {"type":"removeFromWeek","mealId":"<id>"}\n' +
+    '  {"type":"addBuyItem","item":string,"quantity"?:string,"unit"?:string,"section"?:string}\n' +
+    '  {"type":"removeBuyItem","item":string}\n' +
+    '  {"type":"addPantry","name":string,"section"?:string,"low"?:boolean}\n' +
+    '  {"type":"removePantry","name":string}\n' +
+    '  {"type":"setPantryLow","name":string,"low":boolean}';
+
+  function buildAssistantPrompt(history, userText){
+    var convo = history.slice(-ASSISTANT_MAX_TURNS).map(function(m){
+      return (m.role === 'user' ? 'THEM: ' : 'YOU: ') + m.text;
+    }).join('\n');
+
+    return 'You are the assistant inside a two-person household meal-planning app. You help them change '
+      + 'what is in it, by proposing edits the app will apply only after they press Apply.\n\n'
+      + HOUSEHOLD_RULES_TEXT + '\n\n'
+      + 'HOW TO BEHAVE:\n'
+      + '- If you are not certain WHICH meal, ingredient or item they mean, do NOT guess. Return a question '
+      + 'and no actions. Guessing wrong here rewrites a recipe they rely on.\n'
+      + '- Rewriting a method means returning the COMPLETE new method, numbered steps one per line, not a '
+      + 'fragment or a description of the change.\n'
+      + '- When you change an ingredient, change the method to match if the method mentions it. A recipe '
+      + 'whose steps contradict its ingredients is worse than one you left alone.\n'
+      + '- Only ever reference a meal by an id from the list below. Never invent an id.\n'
+      + '- Do only what was asked. Do not tidy, improve or add things nobody mentioned.\n'
+      + '- If something they ask for would break a household rule, say so in the reply and propose the safe '
+      + 'version instead.\n'
+      + '- If they are just asking a question, answer it in the reply with no actions at all.\n\n'
+      + 'CURRENT STATE:\n' + assistantContext(userText) + '\n\n'
+      + (convo ? 'CONVERSATION SO FAR:\n' + convo + '\n\n' : '')
+      + 'THEIR MESSAGE: ' + userText + '\n\n'
+      + 'Reply with ONLY this JSON:\n'
+      + '{\n'
+      + '  "reply": "<a sentence or two to them, plain language>",\n'
+      + '  "question": "<ask only if you genuinely cannot tell what they mean, else omit>",\n'
+      + '  "options": ["<short tappable answers to your question, if useful>"],\n'
+      + '  "actions": [\n' + ASSISTANT_ACTION_SCHEMA + '\n  ]\n'
+      + '}\n'
+      + 'Return "actions": [] when there is nothing to change.';
+  }
+
+  // Everything the model proposes is checked against real records before it is
+  // ever shown, let alone applied. An action naming a meal that doesn't exist
+  // is dropped, not guessed at.
+  function findMealById(id){ return meals.filter(function(m){ return m.id === id; })[0] || null; }
+  function findIngredient(meal, name){
+    var n = normalizePantryTerm(name);
+    var list = meal.ingredients || [];
+    for (var i = 0; i < list.length; i++){
+      if (normalizePantryTerm(list[i].item) === n) return i;
+    }
+    for (var j = 0; j < list.length; j++){
+      if (normalizePantryTerm(list[j].item).indexOf(n) !== -1 && n) return j;
+    }
+    return -1;
+  }
+
+  function validateAction(a){
+    if (!a || typeof a !== 'object' || typeof a.type !== 'string') return null;
+    var meal = a.mealId ? findMealById(a.mealId) : null;
+
+    switch (a.type){
+      case 'updateMeal': {
+        if (!meal || !a.changes || typeof a.changes !== 'object') return null;
+        var ch = {};
+        ['name','base','method','notes'].forEach(function(k){
+          if (typeof a.changes[k] === 'string' && a.changes[k].trim()) ch[k] = a.changes[k];
+        });
+        if (a.changes.servings != null && !isNaN(parseFloat(a.changes.servings))) ch.servings = parseFloat(a.changes.servings);
+        if (TIERS.indexOf(a.changes.tier) !== -1) ch.tier = a.changes.tier;
+        if (!Object.keys(ch).length) return null;
+        return { type:'updateMeal', mealId: meal.id, meal: meal, changes: ch };
+      }
+      case 'addIngredient': {
+        if (!meal || typeof a.item !== 'string' || !a.item.trim()) return null;
+        return { type:'addIngredient', mealId: meal.id, meal: meal,
+          item: a.item.trim(),
+          quantity: a.quantity != null ? String(a.quantity) : '',
+          unit: typeof a.unit === 'string' ? a.unit : '',
+          section: SECTIONS.indexOf(a.section) !== -1 ? a.section : 'other' };
+      }
+      case 'removeIngredient': {
+        if (!meal || typeof a.item !== 'string') return null;
+        var ri = findIngredient(meal, a.item);
+        if (ri === -1) return null;
+        return { type:'removeIngredient', mealId: meal.id, meal: meal, index: ri, item: meal.ingredients[ri].item };
+      }
+      case 'updateIngredient': {
+        if (!meal || typeof a.item !== 'string') return null;
+        var ui2 = findIngredient(meal, a.item);
+        if (ui2 === -1) return null;
+        var patch = {};
+        if (typeof a.newItem === 'string' && a.newItem.trim()) patch.item = a.newItem.trim();
+        if (a.quantity != null) patch.quantity = String(a.quantity);
+        if (typeof a.unit === 'string') patch.unit = a.unit;
+        if (!Object.keys(patch).length) return null;
+        return { type:'updateIngredient', mealId: meal.id, meal: meal, index: ui2,
+          item: meal.ingredients[ui2].item, patch: patch };
+      }
+      case 'addMeal': {
+        if (typeof a.name !== 'string' || !a.name.trim()) return null;
+        return { type:'addMeal', name: a.name.trim(), base: a.base || '',
+          servings: parseFloat(a.servings) || 4,
+          method: typeof a.method === 'string' ? a.method : '',
+          ingredients: Array.isArray(a.ingredients) ? a.ingredients : [] };
+      }
+      case 'addToWeek': {
+        if (!meal) return null;
+        if (getWeekIds().indexOf(meal.id) !== -1) return null;
+        if (getWeekIds().indexOf(null) === -1) return null;
+        return { type:'addToWeek', mealId: meal.id, meal: meal };
+      }
+      case 'removeFromWeek': {
+        if (!meal || getWeekIds().indexOf(meal.id) === -1) return null;
+        return { type:'removeFromWeek', mealId: meal.id, meal: meal };
+      }
+      case 'addBuyItem': {
+        if (typeof a.item !== 'string' || !a.item.trim()) return null;
+        return { type:'addBuyItem', item: a.item.trim(),
+          quantity: a.quantity != null ? String(a.quantity) : '',
+          unit: typeof a.unit === 'string' ? a.unit : '',
+          section: SECTIONS.indexOf(a.section) !== -1 ? a.section : 'other' };
+      }
+      case 'removeBuyItem': {
+        if (typeof a.item !== 'string') return null;
+        var n = normalizePantryTerm(a.item);
+        if (!weekExtras().some(function(x){ return normalizePantryTerm(x.item) === n; })) return null;
+        return { type:'removeBuyItem', item: a.item };
+      }
+      case 'addPantry': {
+        if (typeof a.name !== 'string' || !a.name.trim()) return null;
+        if (pantryHas(a.name)) return null;
+        return { type:'addPantry', name: a.name.trim(),
+          section: SECTIONS.indexOf(a.section) !== -1 ? a.section : 'other', low: !!a.low };
+      }
+      case 'removePantry': {
+        if (typeof a.name !== 'string' || !pantryHas(a.name)) return null;
+        return { type:'removePantry', name: a.name };
+      }
+      case 'setPantryLow': {
+        if (typeof a.name !== 'string' || !pantryHas(a.name)) return null;
+        return { type:'setPantryLow', name: a.name, low: !!a.low };
+      }
+      default: return null;
+    }
+  }
+
+  // The sentence the household reads before deciding. Anything that rewrites
+  // prose carries the whole new text, because "updates the method" is not
+  // something anyone can consent to without seeing it.
+  function describeAction(a){
+    switch (a.type){
+      case 'updateMeal': {
+        var keys = Object.keys(a.changes);
+        var d = { title: 'Change ' + a.meal.name, fields: [] };
+        keys.forEach(function(k){
+          if (k === 'method'){
+            d.fields.push({ label: 'Method', before: a.meal.method || '(nothing written)', after: a.changes.method, long: true });
+          } else if (k === 'notes'){
+            d.fields.push({ label: 'Notes', before: a.meal.notes || '(none)', after: a.changes.notes, long: true });
+          } else {
+            d.fields.push({ label: k.charAt(0).toUpperCase() + k.slice(1), before: String(a.meal[k] || '—'), after: String(a.changes[k]) });
+          }
+        });
+        return d;
+      }
+      case 'addIngredient':
+        return { title: 'Add to ' + a.meal.name, fields: [{ label: 'Ingredient', after: [a.quantity, a.unit, a.item].filter(Boolean).join(' ') }] };
+      case 'removeIngredient':
+        return { title: 'Remove from ' + a.meal.name, fields: [{ label: 'Ingredient', before: a.item, after: '(gone)' }] };
+      case 'updateIngredient': {
+        var cur = a.meal.ingredients[a.index];
+        var before = [cur.quantity, cur.unit, cur.item].filter(Boolean).join(' ');
+        var merged = Object.assign({}, cur, a.patch);
+        var after = [merged.quantity, merged.unit, merged.item].filter(Boolean).join(' ');
+        return { title: 'Change an ingredient in ' + a.meal.name, fields: [{ label: 'Ingredient', before: before, after: after }] };
+      }
+      case 'addMeal':
+        return { title: 'Add a new meal', fields: [
+          { label: 'Name', after: a.name },
+          { label: 'Ingredients', after: a.ingredients.length ? a.ingredients.map(function(i){ return [i.quantity, i.unit, i.item].filter(Boolean).join(' '); }).join(', ') : '(none)' },
+          { label: 'Method', after: a.method || '(none written)', long: true }
+        ]};
+      case 'addToWeek':    return { title: 'Add ' + a.meal.name + ' to this week', fields: [] };
+      case 'removeFromWeek': return { title: 'Take ' + a.meal.name + ' out of this week', fields: [] };
+      case 'addBuyItem':   return { title: 'Add to the buy list', fields: [{ label: 'Item', after: [a.quantity, a.unit, a.item].filter(Boolean).join(' ') }] };
+      case 'removeBuyItem': return { title: 'Take “' + a.item + '” off the buy list', fields: [] };
+      case 'addPantry':    return { title: 'Add to the pantry', fields: [{ label: 'Item', after: a.name + (a.low ? ' (running low)' : '') }] };
+      case 'removePantry': return { title: 'Remove “' + a.name + '” from the pantry', fields: [] };
+      case 'setPantryLow': return { title: (a.low ? 'Flag “' : 'Un-flag “') + a.name + '” ' + (a.low ? 'as running low' : 'as stocked up'), fields: [] };
+      default: return { title: 'Unknown change', fields: [] };
+    }
+  }
+
+  async function applyAssistantAction(a){
+    switch (a.type){
+      case 'updateMeal':
+        return saveMeal(Object.assign({}, findMealById(a.mealId) || a.meal, a.changes));
+      case 'addIngredient': {
+        var m1 = findMealById(a.mealId); if (!m1) return;
+        var flag = autoFlagIngredient(a.item);
+        var next1 = (m1.ingredients || []).concat([{
+          item: a.item, quantity: a.quantity, unit: a.unit, section: a.section,
+          pantryStaple: false, flag: flag ? flag.flag : null, substitute: flag ? flag.substitute : ''
+        }]);
+        return saveMeal(Object.assign({}, m1, { ingredients: next1 }));
+      }
+      case 'removeIngredient': {
+        var m2 = findMealById(a.mealId); if (!m2) return;
+        var idx = findIngredient(m2, a.item); if (idx === -1) return;
+        var next2 = m2.ingredients.slice(); next2.splice(idx, 1);
+        return saveMeal(Object.assign({}, m2, { ingredients: next2 }));
+      }
+      case 'updateIngredient': {
+        var m3 = findMealById(a.mealId); if (!m3) return;
+        var i3 = findIngredient(m3, a.item); if (i3 === -1) return;
+        var next3 = m3.ingredients.slice();
+        var merged3 = Object.assign({}, next3[i3], a.patch);
+        if (a.patch.item){
+          var f3 = autoFlagIngredient(a.patch.item);
+          merged3.flag = f3 ? f3.flag : null;
+          merged3.substitute = f3 ? f3.substitute : '';
+        }
+        next3[i3] = merged3;
+        return saveMeal(Object.assign({}, m3, { ingredients: next3 }));
+      }
+      case 'addMeal': {
+        var fresh = blankMeal();
+        fresh.name = a.name; fresh.base = a.base; fresh.servings = a.servings; fresh.method = a.method;
+        fresh.ingredients = mapIngredients(a.ingredients);
+        fresh.notes = 'Added by the assistant — check the method and ingredients before cooking it.';
+        return saveMeal(fresh);
+      }
+      case 'addToWeek': {
+        var ids = getWeekIds(); var slot = ids.indexOf(null);
+        if (slot === -1) return;
+        ids[slot] = a.mealId;
+        return updateWeek({ mealIds: ids, weekStart: (weekDoc && weekDoc.weekStart) || mondayIso(), started: true });
+      }
+      case 'removeFromWeek': {
+        var ids2 = getWeekIds(); var at = ids2.indexOf(a.mealId);
+        if (at === -1) return;
+        ids2[at] = null;
+        return updateWeek({ mealIds: ids2 });
+      }
+      case 'addBuyItem':
+        return updateWeek({ extraItems: weekExtras().concat([{ item: a.item, quantity: a.quantity, unit: a.unit, section: a.section }]) });
+      case 'removeBuyItem': {
+        var nb = normalizePantryTerm(a.item);
+        return updateWeek({ extraItems: weekExtras().filter(function(x){ return normalizePantryTerm(x.item) !== nb; }) });
+      }
+      case 'addPantry':
+        return savePantry(pantry.concat([{ name: a.name, section: a.section, low: a.low }]));
+      case 'removePantry': {
+        var np = normalizePantryTerm(a.name);
+        return savePantry(pantry.filter(function(p){ return normalizePantryTerm(p.name) !== np; }));
+      }
+      case 'setPantryLow': {
+        var nl = normalizePantryTerm(a.name);
+        return savePantry(pantry.map(function(p){
+          return normalizePantryTerm(p.name) === nl ? Object.assign({}, p, { low: a.low }) : p;
+        }));
+      }
+    }
   }
 
   function sampleErrorMessage(e){
@@ -1856,6 +2248,7 @@
       if (ui.formOpen) html += renderMealFormOverlay();
       if (ui.weekPickerOpen) html += renderWeekPickerOverlay();
       html += footnote();
+      html += renderAssistant();
       if (ui.toast) html += '<div class="toast">'+escapeHtml(ui.toast)+'</div>';
       app.innerHTML = html;
     } catch(err){
@@ -1867,6 +2260,11 @@
       return;
     }
 
+    if (ui.asst.open && ui.asst.scrollWanted){
+      ui.asst.scrollWanted = false;
+      var body = document.getElementById('asst-body');
+      if (body) body.scrollTop = body.scrollHeight;
+    }
     if (ui.scrollToGrocery){
       ui.scrollToGrocery = false;
       var target = document.getElementById('grocery-list');
@@ -1995,6 +2393,113 @@
       '<button type="button" class="btn-link" data-action="signOut">Sign out</button>' +
     '</div></div>';
     return html;
+  }
+
+  function scrollAsstToEnd(){
+    ui.asst.scrollWanted = true;
+    var body = document.getElementById('asst-body');
+    if (body) body.scrollTop = body.scrollHeight;
+  }
+
+  // ---- Assistant bubble ----
+  function renderAssistant(){
+    if (!sampleFn || sampleUnavailable) return '';
+    var a = ui.asst;
+    if (!a.open){
+      return '<button type="button" class="asst-bubble" data-action="openAsst" aria-label="Ask the assistant">' +
+        '<span class="asst-bubble-icon">✳</span><span class="asst-bubble-text">Ask</span></button>';
+    }
+
+    var html = '<div class="asst-panel" id="asst-panel">' +
+      '<div class="asst-head">' +
+        '<div><div class="asst-title">Assistant</div>' +
+        '<div class="asst-sub">Tell it what to change. Nothing happens until you say so.</div></div>' +
+        '<button class="close-x" data-action="closeAsst" aria-label="Close">&times;</button>' +
+      '</div>' +
+      '<div class="asst-body" id="asst-body">';
+
+    if (!a.messages.length && !a.pending){
+      html += '<div class="asst-empty">' +
+        '<p class="muted">Things it can do:</p>' +
+        '<ul class="asst-eg">' +
+          '<li>“swap the butter in the traybake for olive oil”</li>' +
+          '<li>“add coriander to the curry, a big handful”</li>' +
+          '<li>“we’re out of rice, put it on the list”</li>' +
+          '<li>“put the traybake in this week”</li>' +
+        '</ul></div>';
+    }
+
+    a.messages.forEach(function(m){
+      html += '<div class="asst-msg ' + (m.role === 'user' ? 'from-you' : 'from-ai') + '">' +
+        escapeHtml(m.text).replace(/\n/g, '<br>') + '</div>';
+      if (m.role === 'assistant' && m.question){
+        html += '<div class="asst-question">' + escapeHtml(m.question) + '</div>';
+        if (m.options && m.options.length){
+          html += '<div class="asst-options">' + m.options.map(function(opt, i){
+            return '<button type="button" class="g-chip" data-action="asstOption" data-id="'+i+'">'+escapeHtml(opt)+'</button>';
+          }).join('') + '</div>';
+        }
+      }
+    });
+
+    if (a.busy) html += '<div class="asst-msg from-ai asst-thinking">Thinking&hellip;</div>';
+    if (a.error) html += '<div class="warnbox warn">'+escapeHtml(a.error)+'</div>';
+    if (a.pending) html += renderAsstPending(a.pending);
+
+    html += '</div>';
+
+    // The composer is hidden while changes are waiting, so there is exactly one
+    // thing to do: decide about them.
+    if (!a.pending){
+      html += '<form class="asst-foot" data-submit-action="sendAsst">' +
+        '<input type="text" id="asst-input" placeholder="What do you want to change?" value="'+escapeHtml(a.input)+'" data-action="asstInput" autocomplete="off">' +
+        '<button type="submit" class="btn btn-primary btn-sm"'+((a.busy || !a.input.trim())?' disabled':'')+'>Send</button>' +
+      '</form>';
+    }
+    return html + '</div>';
+  }
+
+  function renderAsstPending(pending){
+    var chosen = pending.chosen || {};
+    var count = pending.actions.filter(function(_, i){ return chosen[i] !== false; }).length;
+    var html = '<div class="asst-pending">' +
+      '<div class="asst-pending-head">' + pending.actions.length + ' change' + (pending.actions.length===1?'':'s') + ' ready. Have a read.</div>';
+
+    pending.actions.forEach(function(act, i){
+      var d = describeAction(act);
+      var on = chosen[i] !== false;
+      html += '<div class="asst-change'+(on?'':' off')+'">' +
+        '<label class="asst-change-head">' +
+          '<input type="checkbox" data-action="toggleAsstChange" data-id="'+i+'"'+(on?' checked':'')+'>' +
+          '<span>'+escapeHtml(d.title)+'</span>' +
+        '</label>';
+      d.fields.forEach(function(f){
+        html += '<div class="asst-field"><span class="asst-field-label">'+escapeHtml(f.label)+'</span>';
+        if (f.long){
+          if (f.before) html += '<div class="asst-before"><span class="asst-tag">was</span><pre>'+escapeHtml(f.before)+'</pre></div>';
+          html += '<div class="asst-after"><span class="asst-tag">now</span><pre>'+escapeHtml(f.after)+'</pre></div>';
+        } else {
+          html += '<div class="asst-inline">' +
+            (f.before ? '<s>'+escapeHtml(f.before)+'</s> &rarr; ' : '') +
+            '<strong>'+escapeHtml(f.after)+'</strong></div>';
+        }
+        html += '</div>';
+      });
+      html += '</div>';
+    });
+
+    if (pending.dropped){
+      html += '<div class="g-meta" style="margin-top:8px;">' + pending.dropped +
+        ' suggestion' + (pending.dropped===1?'':'s') + ' didn’t match anything in your list, so ' +
+        (pending.dropped===1?'it was':'they were') + ' left out.</div>';
+    }
+
+    html += '<div class="asst-pending-foot">' +
+      '<button type="button" class="btn btn-ghost btn-sm" data-action="discardAsst">Discard</button>' +
+      '<button type="button" class="btn btn-primary btn-sm" data-action="applyAsst"'+((!count || pending.applying)?' disabled':'')+'>' +
+        (pending.applying ? 'Applying…' : (count ? 'Apply ' + count + ' change' + (count===1?'':'s') : 'Nothing ticked')) +
+      '</button></div>';
+    return html + '</div>';
   }
 
   // ---- Week tab ----
@@ -2371,6 +2876,9 @@
         renderMealsLine(item) +
         (item.mergedFrom && item.mergedFrom.length
           ? '<div class="g-meta">Also listed as '+escapeHtml(item.mergedFrom.join(', '))+'</div>' : '') +
+        (item.extra
+          ? '<div class="g-meta">Added by hand &middot; <button type="button" class="btn-link" data-action="removeBuyItem" data-id="'+encodeURIComponent(item.item)+'">take it off</button></div>'
+          : '') +
         (item.flag ? '<div class="g-flag">'+escapeHtml(flagLabel(item.flag))+(item.substitute? ' — '+escapeHtml(item.substitute) : ' — no solid substitute, decide in the shop')+'</div>'
           : (item.substitute ? '<div class="g-meta">Note: '+escapeHtml(item.substitute)+'</div>' : '')) +
         (item.inPantry
@@ -2765,9 +3273,6 @@
   function renderPantryTab(){
     var low = pantryLowItems();
     var html = '<div class="section-head"><h2>Pantry ('+pantry.length+')</h2>' +
-      (pantry.length && sampleFn && !sampleUnavailable
-        ? '<button class="btn btn-navy btn-sm" data-action="pantryIdeas"'+(ui.pantryIdeasBusy?' disabled':'')+'>'+(ui.pantryIdeasBusy?'Thinking…':'What can we make?')+'</button>'
-        : '') +
     '</div>';
 
     // --- add ---
@@ -2786,8 +3291,6 @@
         : '<p class="muted" style="margin-top:8px;font-size:0.78rem;">Separate several with commas.</p>') +
       (ui.pantryAddNote ? '<div class="warnbox info" style="margin-top:10px;">'+escapeHtml(ui.pantryAddNote)+'</div>' : '') +
     '</div>';
-
-    if (ui.pantryIdeas) html += renderPantryIdeas();
 
     if (!pantry.length){
       return html + '<div class="empty-state">Nothing in the pantry yet. Add the staples you always keep &mdash; oil, salt, stock, rice &mdash; and they\u2019ll stop showing up on the buy list.</div>';
@@ -2824,66 +3327,6 @@
     html += '</div>';
     html += '<p class="muted" style="margin-top:10px;font-size:0.78rem;">Tap a name to flag it as running low; the &times; removes it.</p>';
     return html;
-  }
-
-  // "What can we make?" — the answer people actually want from a pantry.
-  // Three buckets, in descending order of usefulness on a Tuesday night.
-  function renderPantryIdeas(){
-    var r = ui.pantryIdeas;
-    var html = '<div class="card" style="margin-bottom:16px;">' +
-      '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px;">' +
-        '<h3 style="margin:0;">What you could make</h3>' +
-        '<button type="button" class="btn-link" data-action="clearPantryIdeas">Close</button>' +
-      '</div>';
-
-    if (r.error){
-      return html + '<p class="g-flag">'+escapeHtml(r.error)+'</p></div>';
-    }
-
-    var readyNow = r.readyNow || [], almost = r.almost || [], ideas = r.ideas || [];
-    if (!readyNow.length && !almost.length && !ideas.length){
-      return html + '<p class="muted">Nothing came back. Add a few more things to the pantry and try again.</p></div>';
-    }
-
-    if (readyNow.length){
-      html += '<h4 class="cook-label" style="margin-top:12px;">Ready now &mdash; from your own meals</h4>' +
-        '<ul class="idea-list">' + readyNow.map(function(x){
-          var meal = meals.filter(function(m){ return m.name === x.name; })[0];
-          return '<li class="idea ready">' +
-            '<div class="idea-head"><strong>'+escapeHtml(x.name)+'</strong>' +
-              (meal ? ' <button type="button" class="btn-link" data-action="openCook" data-id="'+meal.id+'">Cook it</button>' : '') +
-            '</div>' +
-            (x.note ? '<div class="g-meta">'+escapeHtml(x.note)+'</div>' : '') +
-          '</li>';
-        }).join('') + '</ul>';
-    }
-
-    if (almost.length){
-      html += '<h4 class="cook-label" style="margin-top:16px;">Almost &mdash; one or two things short</h4>' +
-        '<ul class="idea-list">' + almost.map(function(x){
-          var missing = Array.isArray(x.missing) ? x.missing : [];
-          return '<li class="idea">' +
-            '<div class="idea-head"><strong>'+escapeHtml(x.name)+'</strong></div>' +
-            (missing.length ? '<div class="g-meta">Needs '+escapeHtml(missing.join(', '))+'</div>' : '') +
-          '</li>';
-        }).join('') + '</ul>';
-    }
-
-    if (ideas.length){
-      html += '<h4 class="cook-label" style="margin-top:16px;">Ideas beyond your list</h4>' +
-        '<ul class="idea-list">' + ideas.map(function(x, i){
-          return '<li class="idea">' +
-            '<div class="idea-head"><strong>'+escapeHtml(x.name)+'</strong>' +
-              '<button type="button" class="btn-link" data-action="draftIdeaMeal" data-id="'+i+'">Add it to Meals</button>' +
-            '</div>' +
-            (x.uses ? '<div class="g-meta">Uses '+escapeHtml(x.uses)+'</div>' : '') +
-            (x.note ? '<div class="g-meta">'+escapeHtml(x.note)+'</div>' : '') +
-          '</li>';
-        }).join('') + '</ul>';
-    }
-
-    html += '<p class="muted" style="margin-top:14px;font-size:0.78rem;">Suggestions, not a stock take &mdash; it assumes you have salt, pepper and oil, and it can\u2019t see how much of anything is left. Check before you commit to a plan.</p>';
-    return html + '</div>';
   }
 
   // ---- Import tab ----
@@ -3251,7 +3694,7 @@
     await updateWeek({
       weekStart: mondayIso(),
       mealIds: [null,null,null,null,null],
-      checkedItems: {}, cooked: {},
+      checkedItems: {}, cooked: {}, extraItems: [],
       pantryOverrides: {}, pantryMatches: {},
       started: true
     });
@@ -3383,6 +3826,11 @@
       var label = id === 'buy' ? (only ? only.name + ' list' : 'Buy list') : 'Cupboard-check list';
       copyText(text || 'Nothing left — everything on that list is ticked off.', label);
     },
+    removeBuyItem: function(el, id){
+      var name = normalizePantryTerm(decodeURIComponent(id || ''));
+      var next = weekExtras().filter(function(x){ return normalizePantryTerm(x.item) !== name; });
+      return updateWeek({ extraItems: next });
+    },
     setGroceryMeal: function(el, id){
       ui.groceryMealFilter = id || null;
       ui.pantryCheckNote = null;
@@ -3483,40 +3931,89 @@
       return savePantry(next).then(render).catch(reportActionError);
     },
 
-    pantryIdeas: async function(){
-      if (!sampleFn || ui.pantryIdeasBusy || !pantry.length) return;
-      ui.pantryIdeasBusy = true; ui.pantryIdeas = null; render();
+    addPantryItem: function(){
+      var raw = (ui.pantryInput || '').trim();
+      if (!raw) return;
+      var additions = raw.split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+      var next = pantry.slice(), added = 0;
+      additions.forEach(function(name){
+        if (pantryHas(name) || next.some(function(p){ return normalizePantryTerm(p.name) === normalizePantryTerm(name); })) return;
+        next.push({ name: name, section: 'other', low: false });
+        added++;
+      });
+      ui.pantryInput = ''; ui.pantryAddNote = null;
+      return savePantry(next).then(function(){
+        ui.toast = added ? (added > 1 ? 'Added '+added+' to the pantry' : 'Added to the pantry') : 'Already on the list';
+        render();
+        setTimeout(function(){ ui.toast = null; render(); }, 1600);
+      }).catch(reportActionError);
+    },
+    // The same box, but Claude splits and files it. Anything it returns that
+    // wasn't in what they typed is dropped: a pantry that quietly grows items
+    // nobody bought is worse than one that needs a bit of typing.
+    addPantryWithAi: async function(){
+      var raw = (ui.pantryInput || '').trim();
+      if (!raw || !sampleFn || ui.pantrySortBusy) return;
+      ui.pantrySortBusy = true; ui.pantryAddNote = null; render();
       try {
-        var result = await sampleFn.json(buildPantryIdeasPrompt(pantry, meals));
-        ui.pantryIdeasBusy = false;
-        ui.pantryIdeas = {
-          readyNow: Array.isArray(result && result.readyNow) ? result.readyNow : [],
-          almost:   Array.isArray(result && result.almost)   ? result.almost   : [],
-          ideas:    Array.isArray(result && result.ideas)    ? result.ideas    : []
-        };
+        var result = await sampleFn.json(buildPantrySortPrompt(raw, pantryNames()));
+        var incoming = normalizePantryList(result && result.items);
+        var typed = normalizePantryTerm(raw);
+        var next = pantry.slice(), added = 0, ignored = 0, flagged = 0;
+        incoming.forEach(function(item){
+          var key = normalizePantryTerm(item.name);
+          // Every word of the entry has to appear in what they typed. Catches an
+          // invented "onions" while still allowing "toms" -> "tinned tomatoes".
+          var grounded = key.split(' ').some(function(w){ return w.length > 2 && typed.indexOf(w) !== -1; });
+          if (!grounded){ ignored++; return; }
+          var existing = next.filter(function(p){ return normalizePantryTerm(p.name) === key; })[0];
+          if (existing){
+            // Already on the list, but "we're nearly out of oil" is still news.
+            // Skipping the whole entry threw that away.
+            if (item.low && !existing.low){
+              next = next.map(function(p){ return p === existing ? Object.assign({}, p, { low: true }) : p; });
+              flagged++;
+            }
+            return;
+          }
+          next.push(item);
+          added++;
+        });
+        ui.pantrySortBusy = false;
+        if (!added && !flagged){
+          ui.pantryAddNote = ignored
+            ? 'Nothing added — what came back didn’t match what you typed. Try “Add plain”.'
+            : 'Nothing new there — it’s all on the list already.';
+          render();
+          return;
+        }
+        ui.pantryInput = '';
+        var bits = [];
+        if (added) bits.push('Added ' + added + ' item' + (added===1?'':'s') + ', filed by shelf.');
+        if (flagged) bits.push('Marked ' + flagged + ' as running low.');
+        if (ignored) bits.push('Left out ' + ignored + ' that didn’t match what you typed.');
+        ui.pantryAddNote = bits.join(' ');
+        await savePantry(next);
         render();
       } catch(e){
-        ui.pantryIdeasBusy = false;
-        ui.pantryIdeas = { error: sampleErrorMessage(e) || 'Couldn’t come up with anything just now.' };
+        ui.pantrySortBusy = false;
+        ui.pantryAddNote = sampleErrorMessage(e) || 'Couldn’t sort that just now — “Add plain” still works.';
         render();
       }
     },
-    clearPantryIdeas: function(){ ui.pantryIdeas = null; render(); },
-    // An idea is a name and a sentence, not a recipe. This opens the meal form
-    // with the name filled in and says so — the household still has to write
-    // the method, which is the only honest way to add it given the allergy list.
-    draftIdeaMeal: function(el, id){
-      var idea = ui.pantryIdeas && ui.pantryIdeas.ideas ? ui.pantryIdeas.ideas[parseInt(id, 10)] : null;
-      if (!idea) return;
-      resetAdjustState();
-      var m = blankMeal();
-      m.name = idea.name || '';
-      m.notes = 'Suggested from the pantry' + (idea.uses ? ' to use up ' + idea.uses : '') + '. ' +
-        'NOTHING HERE IS A REAL RECIPE YET — write the method and ingredients, and check them against the household rules before cooking.';
-      ui.formDraft = m;
-      ui.formOpen = true;
-      render();
+    removePantryItem: function(el, id){
+      var name = decodeURIComponent(id || '');
+      var next = pantry.filter(function(p){ return normalizePantryTerm(p.name) !== normalizePantryTerm(name); });
+      return savePantry(next).then(render).catch(reportActionError);
     },
+    togglePantryLow: function(el, id){
+      var name = normalizePantryTerm(decodeURIComponent(id || ''));
+      var next = pantry.map(function(p){
+        return normalizePantryTerm(p.name) === name ? Object.assign({}, p, { low: !p.low }) : p;
+      });
+      return savePantry(next).then(render).catch(reportActionError);
+    },
+
     // Estimating macros writes straight to the saved meal rather than opening
     // the form: the point is to see a number on a meal you already have, not to
     // start an edit you then have to remember to save.
@@ -3541,6 +4038,99 @@
         renderFromDraft();
       }
     },
+    openAsst: function(){ ui.asst.open = true; ui.asst.error = null; render(); },
+    closeAsst: function(){ ui.asst.open = false; render(); },
+    asstInput: function(el){ ui.asst.input = el.value; render(); },
+    asstOption: function(el, id){
+      var last = ui.asst.messages.filter(function(m){ return m.role === 'assistant' && m.options; }).pop();
+      if (!last) return;
+      var text = last.options[parseInt(id, 10)];
+      if (!text) return;
+      ui.asst.input = text;
+      return actions.sendAsst(null, null, null, { preventDefault: function(){} });
+    },
+    sendAsst: async function(el, id, extra, e){
+      if (e && e.preventDefault) e.preventDefault();
+      var a = ui.asst;
+      if (a.busy || !sampleFn) return;
+      var inputEl = document.getElementById('asst-input');
+      if (inputEl) a.input = inputEl.value;
+      var text = (a.input || '').trim();
+      if (!text) return;
+
+      a.messages.push({ role: 'user', text: text });
+      a.input = ''; a.busy = true; a.error = null; a.pending = null;
+      render();
+      scrollAsstToEnd();
+
+      try {
+        var result = await sampleFn.json(buildAssistantPrompt(a.messages.slice(0, -1), text));
+        a.busy = false;
+
+        var raw = Array.isArray(result && result.actions) ? result.actions : [];
+        var valid = [], dropped = 0;
+        raw.forEach(function(x){
+          var v = validateAction(x);
+          if (v) valid.push(v); else dropped++;
+        });
+
+        var reply = (result && typeof result.reply === 'string' && result.reply.trim())
+          ? result.reply.trim()
+          : (valid.length ? 'Here’s what I’d change.' : 'I couldn’t find anything to change there.');
+        var question = (result && typeof result.question === 'string' && result.question.trim()) ? result.question.trim() : null;
+        var options = (result && Array.isArray(result.options))
+          ? result.options.filter(function(o){ return typeof o === 'string' && o.trim(); }).slice(0, 4)
+          : [];
+
+        a.messages.push({ role: 'assistant', text: reply, question: question, options: options });
+
+        // A question and a set of changes at the same time is a contradiction —
+        // it either knows what you meant or it doesn't. The question wins.
+        if (valid.length && !question){
+          a.pending = { actions: valid, chosen: {}, dropped: dropped, applying: false };
+        } else if (dropped && !question){
+          a.messages.push({ role: 'assistant', text: 'I had ' + dropped + ' idea' + (dropped===1?'':'s') +
+            ' that didn’t match anything in your list, so I left ' + (dropped===1?'it':'them') + ' out.' });
+        }
+        render();
+        scrollAsstToEnd();
+      } catch(err){
+        a.busy = false;
+        a.error = sampleErrorMessage(err) || 'Something went wrong there — try again.';
+        render();
+      }
+    },
+    toggleAsstChange: function(el, id){
+      var p = ui.asst.pending; if (!p) return;
+      var i = parseInt(id, 10);
+      p.chosen[i] = (p.chosen[i] === false);
+      render();
+    },
+    discardAsst: function(){
+      ui.asst.pending = null;
+      ui.asst.messages.push({ role: 'assistant', text: 'Left everything as it was.' });
+      render();
+      scrollAsstToEnd();
+    },
+    applyAsst: async function(){
+      var p = ui.asst.pending;
+      if (!p || p.applying) return;
+      var picked = p.actions.filter(function(_, i){ return p.chosen[i] !== false; });
+      if (!picked.length) return;
+      p.applying = true; render();
+      var done = 0, failed = 0;
+      for (var i = 0; i < picked.length; i++){
+        try { await applyAssistantAction(picked[i]); done++; }
+        catch(err){ failed++; }
+      }
+      ui.asst.pending = null;
+      ui.asst.messages.push({ role: 'assistant', text: failed
+        ? 'Applied ' + done + ' of ' + picked.length + '. ' + failed + ' didn’t save — the rest went through.'
+        : 'Done — ' + done + ' change' + (done===1?'':'s') + ' applied.' });
+      render();
+      scrollAsstToEnd();
+    },
+
     setAuthMode: function(el, id){
       ui.authMode = (id === 'signup') ? 'signup' : 'signin';
       ui.authFormError = null; ui.authNotice = null;
@@ -4271,8 +4861,8 @@
   // click listener below would otherwise re-run them a second time on the same
   // interaction — double-toggling a checkbox back to its old value, or tearing a
   // text input out of the DOM mid-focus when its container re-renders).
-  var CHANGE_ACTIONS = { pdfFile:1, filterTier:1, filterSort:1, weekPickerTier:1, toggleGroceryItem:1, setMealTier:1, linkDraftToggle:1, toggleCookIngredient:1 };
-  var LIVE_INPUT_ACTIONS = { importTextInput:1, importUrlInput:1, filterSearch:1, weekPickerSearch:1, linkUrlInput:1, pantryInput:1, importDataInput:1 };
+  var CHANGE_ACTIONS = { pdfFile:1, filterTier:1, filterSort:1, weekPickerTier:1, toggleGroceryItem:1, setMealTier:1, linkDraftToggle:1, toggleCookIngredient:1, toggleAsstChange:1 };
+  var LIVE_INPUT_ACTIONS = { importTextInput:1, importUrlInput:1, filterSearch:1, weekPickerSearch:1, linkUrlInput:1, pantryInput:1, importDataInput:1, asstInput:1 };
 
   // Every handler runs through here. A throw inside one used to leave the action
   // half-done with no re-render — the app just stopped responding, with the real
