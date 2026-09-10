@@ -860,35 +860,32 @@
     if (!id) body.createdAt = Date.now();
     var uid = session && session.user ? session.user.id : null;
     if (id){
-      return supa.from('meals').update({ data: body, updated_by: uid }).eq('id', id).then(throwOnError);
+      return thenRefresh(supa.from('meals').update({ data: body, updated_by: uid }).eq('id', id));
     }
-    return supa.from('meals')
-      .insert({ household_id: householdId, data: body, created_by: uid, updated_by: uid })
-      .then(throwOnError);
+    return thenRefresh(supa.from('meals')
+      .insert({ household_id: householdId, data: body, created_by: uid, updated_by: uid }));
   }
   function supaDeleteMeal(id){
-    return supa.from('meals').delete().eq('id', id).then(throwOnError);
+    return thenRefresh(supa.from('meals').delete().eq('id', id));
   }
   function supaSaveWeek(w){
     var uid = session && session.user ? session.user.id : null;
-    return supa.from('weeks')
-      .upsert({ household_id: householdId, data: w, updated_by: uid }, { onConflict: 'household_id' })
-      .then(throwOnError);
+    return thenRefresh(supa.from('weeks')
+      .upsert({ household_id: householdId, data: w, updated_by: uid }, { onConflict: 'household_id' }));
   }
   function supaSavePantry(list){
     var uid = session && session.user ? session.user.id : null;
-    return supa.from('pantry')
-      .upsert({ household_id: householdId, items: list, updated_by: uid }, { onConflict: 'household_id' })
-      .then(throwOnError);
+    return thenRefresh(supa.from('pantry')
+      .upsert({ household_id: householdId, items: list, updated_by: uid }, { onConflict: 'household_id' }));
   }
   function supaSaveHistory(entry){
     var body = JSON.parse(JSON.stringify(entry));
     delete body.id;
     body.archivedAt = Date.now();
-    return supa.from('history').insert({ household_id: householdId, data: body }).then(throwOnError);
+    return thenRefresh(supa.from('history').insert({ household_id: householdId, data: body }));
   }
   function supaDeleteHistory(id){
-    return supa.from('history').delete().eq('id', id).then(throwOnError);
+    return thenRefresh(supa.from('history').delete().eq('id', id));
   }
   // supabase-js resolves rather than rejects on a database error, so an
   // unchecked call looks exactly like a successful one. Every write goes
@@ -896,6 +893,11 @@
   function throwOnError(res){
     if (res && res.error) throw new Error(res.error.message || 'The database refused that write.');
     return res;
+  }
+  // ...and then re-reads, so the screen reflects what you just did without
+  // depending on a socket you cannot see.
+  function thenRefresh(promise){
+    return promise.then(throwOnError).then(function(res){ refreshFromSupabase(); return res; });
   }
 
   // ---------- pantry ----------
@@ -1025,28 +1027,52 @@
   // In self-hosted mode the AI runs behind our own endpoint, which holds the
   // API key server-side. The shape deliberately matches the artifact's `sample`
   // namespace so every caller in the app stays identical.
+  // Models like to wrap JSON in prose or a code fence. Pull the outermost
+  // object out rather than failing the whole request over a stray sentence.
+  function extractJson(text){
+    var fenced = String(text).match(/```(?:json)?\s*([\s\S]*?)```/);
+    var candidate = (fenced ? fenced[1] : String(text)).trim();
+    try { return JSON.parse(candidate); } catch(e){}
+    var start = candidate.indexOf('{'), end = candidate.lastIndexOf('}');
+    if (start !== -1 && end > start){
+      try { return JSON.parse(candidate.slice(start, end + 1)); } catch(e){}
+    }
+    return null;
+  }
+
   function proxySample(){
     var endpoint = (MP && MP.aiEndpoint) || '/api/ai';
-    function post(prompt, wantJson){
+    // The reply is streamed as plain text. Reading it to the end still takes as
+    // long as the model takes, but the first byte arrives immediately, which is
+    // what keeps a hosting platform from cutting the request off as a timeout.
+    function post(prompt, task, wantJson){
       var token = session && session.access_token ? session.access_token : '';
       return fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body: JSON.stringify({ prompt: prompt, json: !!wantJson })
+        body: JSON.stringify({ prompt: prompt, task: task || '' })
       }).then(function(res){
         if (res.status === 401){ var e = new Error('Signed out'); e.code = 'not_granted'; throw e; }
         if (res.status === 429){ var r = new Error('Too many requests'); r.code = 'rate_limited'; throw r; }
-        if (!res.ok) throw new Error('The AI service returned ' + res.status + '.');
-        return res.json();
-      }).then(function(body){
-        if (body && body.error) throw new Error(body.error);
-        if (!wantJson) return { text: (body && body.text) || '' };
-        if (body && body.data !== undefined) return body.data;
-        var e = new Error('No structured answer came back'); e.code = 'invalid_json'; throw e;
+        if (!res.ok){
+          return res.json().catch(function(){ return null; }).then(function(body){
+            throw new Error((body && body.error) || ('The AI service returned ' + res.status + '.'));
+          });
+        }
+        return res.text();
+      }).then(function(text){
+        // A failure that happens after the response has started cannot change
+        // the status code, so it arrives in the body instead.
+        var marked = String(text).indexOf('[[MP_ERROR]]');
+        if (marked !== -1) throw new Error(String(text).slice(marked + 12).trim() || 'That one failed.');
+        if (!wantJson) return { text: text };
+        var data = extractJson(text);
+        if (data === null){ var e2 = new Error('No structured answer came back'); e2.code = 'invalid_json'; throw e2; }
+        return data;
       });
     }
-    var fn = function(prompt){ return post(prompt, false); };
-    fn.json = function(prompt){ return post(prompt, true); };
+    var fn = function(prompt, task){ return post(prompt, task, false); };
+    fn.json = function(prompt, task){ return post(prompt, task, true); };
     return fn;
   }
 
@@ -1116,12 +1142,15 @@
   // Realtime tells us something changed; it doesn't tell us the whole truth of
   // the table. Re-reading is a handful of small queries at this size and it
   // cannot drift, which a stream of patches applied to local state can.
+  var refreshPending = null;
+  function refreshFromSupabase(){
+    if (!supa || !householdId) return;
+    if (refreshPending) clearTimeout(refreshPending);
+    refreshPending = setTimeout(function(){ refreshPending = null; supaLoadAll(); }, 160);
+  }
+
   function supaSubscribe(){
-    var pending = null;
-    function refresh(){
-      if (pending) clearTimeout(pending);
-      pending = setTimeout(function(){ pending = null; supaLoadAll(); }, 180);
-    }
+    var refresh = refreshFromSupabase;
     supa.channel('household-' + householdId)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'meals',   filter: 'household_id=eq.' + householdId }, refresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'weeks',   filter: 'household_id=eq.' + householdId }, refresh)
@@ -1662,7 +1691,7 @@
   // Returns true if it actually wrote something. Rejections are left to the
   // caller so a single failure and a batch failure can be reported differently.
   async function estimateMacrosFor(m){
-    var result = await sampleFn.json(buildMacroPrompt(m));
+    var result = await sampleFn.json(buildMacroPrompt(m), 'macros');
     var next = normalizeMacros(result);
     if (!hasMacros({ macros: next })) return false;
     var updated = Object.assign({}, m, { macros: next, macrosSource: 'estimate' });
@@ -4041,7 +4070,7 @@
       if (!raw || !sampleFn || ui.pantrySortBusy) return;
       ui.pantrySortBusy = true; ui.pantryAddNote = null; render();
       try {
-        var result = await sampleFn.json(buildPantrySortPrompt(raw, pantryNames()));
+        var result = await sampleFn.json(buildPantrySortPrompt(raw, pantryNames()), 'pantrySort');
         var incoming = normalizePantryList(result && result.items);
         var typed = normalizePantryTerm(raw);
         var next = pantry.slice(), added = 0, ignored = 0, flagged = 0;
@@ -4099,88 +4128,6 @@
       return savePantry(next).then(render).catch(reportActionError);
     },
 
-    addPantryItem: function(){
-      var raw = (ui.pantryInput || '').trim();
-      if (!raw) return;
-      var additions = raw.split(',').map(function(s){ return s.trim(); }).filter(Boolean);
-      var next = pantry.slice(), added = 0;
-      additions.forEach(function(name){
-        if (pantryHas(name) || next.some(function(p){ return normalizePantryTerm(p.name) === normalizePantryTerm(name); })) return;
-        next.push({ name: name, section: 'other', low: false });
-        added++;
-      });
-      ui.pantryInput = ''; ui.pantryAddNote = null;
-      return savePantry(next).then(function(){
-        ui.toast = added ? (added > 1 ? 'Added '+added+' to the pantry' : 'Added to the pantry') : 'Already on the list';
-        render();
-        setTimeout(function(){ ui.toast = null; render(); }, 1600);
-      }).catch(reportActionError);
-    },
-    // The same box, but Claude splits and files it. Anything it returns that
-    // wasn't in what they typed is dropped: a pantry that quietly grows items
-    // nobody bought is worse than one that needs a bit of typing.
-    addPantryWithAi: async function(){
-      var raw = (ui.pantryInput || '').trim();
-      if (!raw || !sampleFn || ui.pantrySortBusy) return;
-      ui.pantrySortBusy = true; ui.pantryAddNote = null; render();
-      try {
-        var result = await sampleFn.json(buildPantrySortPrompt(raw, pantryNames()));
-        var incoming = normalizePantryList(result && result.items);
-        var typed = normalizePantryTerm(raw);
-        var next = pantry.slice(), added = 0, ignored = 0, flagged = 0;
-        incoming.forEach(function(item){
-          var key = normalizePantryTerm(item.name);
-          // Every word of the entry has to appear in what they typed. Catches an
-          // invented "onions" while still allowing "toms" -> "tinned tomatoes".
-          var grounded = key.split(' ').some(function(w){ return w.length > 2 && typed.indexOf(w) !== -1; });
-          if (!grounded){ ignored++; return; }
-          var existing = next.filter(function(p){ return normalizePantryTerm(p.name) === key; })[0];
-          if (existing){
-            // Already on the list, but "we're nearly out of oil" is still news.
-            // Skipping the whole entry threw that away.
-            if (item.low && !existing.low){
-              next = next.map(function(p){ return p === existing ? Object.assign({}, p, { low: true }) : p; });
-              flagged++;
-            }
-            return;
-          }
-          next.push(item);
-          added++;
-        });
-        ui.pantrySortBusy = false;
-        if (!added && !flagged){
-          ui.pantryAddNote = ignored
-            ? 'Nothing added — what came back didn’t match what you typed. Try “Add plain”.'
-            : 'Nothing new there — it’s all on the list already.';
-          render();
-          return;
-        }
-        ui.pantryInput = '';
-        var bits = [];
-        if (added) bits.push('Added ' + added + ' item' + (added===1?'':'s') + ', filed by shelf.');
-        if (flagged) bits.push('Marked ' + flagged + ' as running low.');
-        if (ignored) bits.push('Left out ' + ignored + ' that didn’t match what you typed.');
-        ui.pantryAddNote = bits.join(' ');
-        await savePantry(next);
-        render();
-      } catch(e){
-        ui.pantrySortBusy = false;
-        ui.pantryAddNote = sampleErrorMessage(e) || 'Couldn’t sort that just now — “Add plain” still works.';
-        render();
-      }
-    },
-    removePantryItem: function(el, id){
-      var name = decodeURIComponent(id || '');
-      var next = pantry.filter(function(p){ return normalizePantryTerm(p.name) !== normalizePantryTerm(name); });
-      return savePantry(next).then(render).catch(reportActionError);
-    },
-    togglePantryLow: function(el, id){
-      var name = normalizePantryTerm(decodeURIComponent(id || ''));
-      var next = pantry.map(function(p){
-        return normalizePantryTerm(p.name) === name ? Object.assign({}, p, { low: !p.low }) : p;
-      });
-      return savePantry(next).then(render).catch(reportActionError);
-    },
 
     // Estimating macros writes straight to the saved meal rather than opening
     // the form: the point is to see a number on a meal you already have, not to
@@ -4190,7 +4137,7 @@
       syncFormDraftFromDom();
       ui.macroEstimating = 'form'; ui.adjustError = null; renderFromDraft();
       try {
-        var result = await sampleFn.json(buildMacroPrompt(ui.formDraft));
+        var result = await sampleFn.json(buildMacroPrompt(ui.formDraft), 'macros');
         var next = normalizeMacros(result);
         ui.macroEstimating = null;
         if (!hasMacros({ macros: next })){
@@ -4232,7 +4179,7 @@
       scrollAsstToEnd();
 
       try {
-        var result = await sampleFn.json(buildAssistantPrompt(a.messages.slice(0, -1), text));
+        var result = await sampleFn.json(buildAssistantPrompt(a.messages.slice(0, -1), text), 'assistant');
         a.busy = false;
 
         var raw = Array.isArray(result && result.actions) ? result.actions : [];
@@ -4659,7 +4606,7 @@
       syncSlotEditFromDom();
       ui.macroEstimating = id; ui.slotEditError = null; renderFromDraft();
       try {
-        var result = await sampleFn.json(buildMacroPrompt(Object.assign({}, m, { servings: parseFloat(ui.slotEdit.servings) || m.servings })));
+        var result = await sampleFn.json(buildMacroPrompt(Object.assign({}, m, { servings: parseFloat(ui.slotEdit.servings) || m.servings })), 'macros');
         var next = normalizeMacros(result);
         ui.macroEstimating = null;
         if (!hasMacros({ macros: next })){
@@ -4735,7 +4682,7 @@
 
       ui.pantryChecking = true; ui.pantryCheckNote = null; render();
       try {
-        var result = await sampleFn.json(buildPantryMatchPrompt(pantryNames(), names));
+        var result = await sampleFn.json(buildPantryMatchPrompt(pantryNames(), names), 'pantryMatch');
         var known = {};
         names.forEach(function(n){ known[normalizePantryTerm(n)] = n; });
 
@@ -4824,7 +4771,7 @@
 
         if (ui.linkDraft && sampleFn && name){
           try {
-            var draft = await sampleFn.json(buildLinkDraftPrompt(name, url));
+            var draft = await sampleFn.json(buildLinkDraftPrompt(name, url), 'linkDraft');
             var drafted = draftToMeal(draft, url);
             if (drafted.name) meal.name = drafted.name;
             meal.base = drafted.base; meal.effort = drafted.effort;
@@ -4876,7 +4823,7 @@
       for (var i=0;i<files.length;i++){
         try {
           var text = await extractPdfText(files[i]);
-          var draft = await sampleFn.json(buildExtractionPrompt(text, ''));
+          var draft = await sampleFn.json(buildExtractionPrompt(text, ''), 'extract');
           saveMeal(draftToMeal(draft, ''));
         } catch(e){
           ui.bulkFailed.push(files[i].name);
@@ -4891,7 +4838,7 @@
       if (!sampleFn){ sampleUnavailable = true; render(); return; }
       ui.importExtracting = true; ui.importError = null; render();
       try {
-        var draft = await sampleFn.json(buildExtractionPrompt(ui.importRawText, ui.importSourceUrl));
+        var draft = await sampleFn.json(buildExtractionPrompt(ui.importRawText, ui.importSourceUrl), 'extract');
         ui.importExtracting = false;
         resetAdjustState();
         ui.formDraft = draftToMeal(draft, ui.importSourceUrl);
@@ -4913,7 +4860,7 @@
       ui.adjustInstruction = instruction;
       ui.adjusting = true; ui.adjustError = null; ui.adjustApplied = false; render();
       try {
-        var result = await sampleFn.json(buildAdjustPrompt(ui.formDraft, instruction));
+        var result = await sampleFn.json(buildAdjustPrompt(ui.formDraft, instruction), 'adjust');
         if (result.base) ui.formDraft.base = result.base;
         if (result.method) ui.formDraft.method = result.method;
         // Append rather than replace: notes are where the household records what

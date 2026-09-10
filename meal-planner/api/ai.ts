@@ -33,8 +33,15 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // The model the app's prompts were written and tested against.
 const MODEL = 'claude-opus-5';
-const MAX_TOKENS = 8000;
 
+// Effort is the first lever on how long a request takes, and these jobs do not
+// all deserve the same amount of thinking. Pulling a recipe out of text that is
+// already in front of it is not the same problem as rewriting a method without
+// breaking an allergy note, and a bulk PDF import runs the first one twenty
+// times in a row.
+//
+// max_tokens is per job too: a macro estimate is four numbers, not an essay,
+// and an over-large ceiling costs latency even when it goes unused.
 // A prompt long enough to be a mistake, or an attempt to run up a bill.
 const MAX_PROMPT_CHARS = 60_000;
 
@@ -56,6 +63,18 @@ function rateLimited(userId: string): boolean {
   entry.count += 1;
   return entry.count > MAX_PER_WINDOW;
 }
+
+type Effort = 'low' | 'medium' | 'high';
+const TASKS: Record<string, { effort: Effort; maxTokens: number }> = {
+  extract:     { effort: 'low',    maxTokens: 4000 },  // recipe out of PDF text
+  linkDraft:   { effort: 'low',    maxTokens: 3000 },
+  macros:      { effort: 'low',    maxTokens: 700  },
+  pantrySort:  { effort: 'low',    maxTokens: 1500 },
+  pantryMatch: { effort: 'low',    maxTokens: 3000 },  // tidy the grocery list
+  adjust:      { effort: 'medium', maxTokens: 6000 },  // rewrites a method
+  assistant:   { effort: 'medium', maxTokens: 6000 },  // must not guess a meal
+};
+const DEFAULT_TASK = { effort: 'medium' as Effort, maxTokens: 4000 };
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -107,7 +126,7 @@ export default async function handler(req: Request): Promise<Response> {
   if (!userId) return json({ error: 'Sign in first' }, 401);
   if (rateLimited(userId)) return json({ error: 'Too many requests — wait a minute' }, 429);
 
-  let body: { prompt?: unknown; json?: unknown };
+  let body: { prompt?: unknown; task?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -115,38 +134,66 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   const prompt = typeof body.prompt === 'string' ? body.prompt : '';
-  const wantJson = body.json === true;
   if (!prompt.trim()) return json({ error: 'Nothing to send' }, 400);
   if (prompt.length > MAX_PROMPT_CHARS) return json({ error: 'That request is too large' }, 413);
 
+  const taskName = typeof body.task === 'string' ? body.task : '';
+  const task = TASKS[taskName] || DEFAULT_TASK;
+
   try {
-    // Streaming because max_tokens is high enough that a non-streamed request
-    // can outlive the platform's HTTP timeout on a long recipe.
+    // Streamed, and streamed all the way to the browser. Buffering the whole
+    // reply here means no bytes leave until the model has finished, and a
+    // platform that expects a first byte within ~25 seconds kills the request
+    // — which is what "taking too long to connect" was. Once bytes are
+    // flowing the clock stops mattering.
+    //
+    // No `thinking` parameter: Opus 5 runs adaptive thinking by default, and
+    // the older fixed-budget form is rejected on this model.
     const stream = anthropic.messages.stream({
       model: MODEL,
-      max_tokens: MAX_TOKENS,
-      // No `thinking` parameter: Opus 5 runs adaptive thinking by default, and
-      // the older fixed-budget form it would otherwise take is rejected with a
-      // 400 on this model.
+      max_tokens: task.maxTokens,
+      output_config: { effort: task.effort },
       messages: [{ role: 'user', content: prompt }],
     });
-    const message = await stream.finalMessage();
 
-    // Safety classifiers can decline a request: HTTP 200, no content.
-    if (message.stop_reason === 'refusal') {
-      return json({ error: 'The model declined that request.' }, 422);
-    }
+    const encoder = new TextEncoder();
+    const out = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        // A space first, immediately. It costs nothing, it is ignored by both
+        // JSON.parse and the plain-text path, and it starts the clock on the
+        // response rather than on the model.
+        controller.enqueue(encoder.encode(' '));
+        try {
+          for await (const event of stream) {
+            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+              controller.enqueue(encoder.encode(event.delta.text));
+            }
+          }
+          const message = await stream.finalMessage();
+          if (message.stop_reason === 'refusal') {
+            // The status is long gone, so say it in the body. The client shows
+            // this rather than failing to parse an empty answer.
+            controller.enqueue(encoder.encode('\n\n[[MP_ERROR]] The model declined that request.'));
+          }
+        } catch (err) {
+          console.error('[api/ai] mid-stream', err);
+          controller.enqueue(encoder.encode('\n\n[[MP_ERROR]] The AI service dropped that one — try again.'));
+        }
+        controller.close();
+      },
+      cancel() { stream.abort(); },
+    });
 
-    const text = message.content
-      .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-      .map((block) => block.text)
-      .join('');
-
-    if (!wantJson) return json({ text });
-
-    const data = extractJson(text);
-    if (data === null) return json({ error: 'No structured answer came back' }, 502);
-    return json({ data });
+    return new Response(out, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-store',
+        // Some proxies buffer a response unless told not to, which would put
+        // the timeout straight back.
+        'X-Accel-Buffering': 'no',
+      },
+    });
   } catch (err) {
     if (err instanceof Anthropic.RateLimitError) {
       return json({ error: 'The AI service is rate limiting — try again shortly' }, 429);

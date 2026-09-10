@@ -3,6 +3,9 @@
   "buildCommand": "node build.mjs",
   "outputDirectory": "dist",
   "framework": null,
+  "functions": {
+    "api/*.ts": { "maxDuration": 300 }
+  },
   "headers": [
     {
       "source": "/sw.js",

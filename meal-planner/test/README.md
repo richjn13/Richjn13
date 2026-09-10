@@ -1,6 +1,6 @@
 # Tests
 
-Sixteen Playwright suites drive the real page in Chromium with `window.claude`
+Seventeen Playwright suites drive the real page in Chromium with `window.claude`
 stubbed, so the app runs in its localStorage mode and `sample` returns a canned
 response. They exist because reading this code repeatedly produced fixes that
 looked right and weren't; every suite below started as a bug that inspection
@@ -16,6 +16,7 @@ missed.
 | `week-detail` | Per-slot macros, the per-meal breakdown table, targets, the inline "tweak" editor (including that Cancel cancels and 0 servings is refused), and pantry coverage per recipe. |
 | `grocery-filter` | Filtering the list to one meal rebuilds it from that meal, so garlic reads 3 cloves and not the week's 5. |
 | `grocery-page` | The list on its own tab; a tick survives an item moving between the buy list and the cupboard; copy skips ticked items; a new week drops last week's pantry guesses but keeps learned wording. |
+| `delete-and-proxy` | Two bugs from real use: deleting a meal works on device and self-hosted **with realtime dead**, because a write now refreshes the screen itself rather than waiting for an echo; and the AI proxy's streamed reply is parsed, names its job, and surfaces a failure that arrives mid-stream. |
 | `mobile` | Phone regressions, run against `dist/index.html` because only the built page carries the viewport meta: every tab on screen without a sideways swipe, no page scrolls sideways, the grocery tick target is a real one and the row actions sit outside it, and the floating bubble is not rendered over cook mode, the meal form or the week picker. |
 | `week-size` | A week is any size from 1 to 10: growing is free, shrinking past a slot that holds a meal names the pick it would lose and waits, the floor and ceiling hold, auto-pick fills exactly the week, and a new week keeps the chosen size. |
 | `assistant` | The assistant proposes and never writes: nothing changes before Apply, unticking a change excludes it, Discard writes nothing, an action naming a meal that doesn't exist is dropped rather than guessed at, and a clarifying question suppresses changes entirely. |
