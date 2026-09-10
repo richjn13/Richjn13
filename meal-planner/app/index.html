@@ -58,6 +58,25 @@
   .tab:hover{ color:var(--ink); }
   .tab.active:hover{ color:var(--terracotta); }
 
+  /* Phone. Six tabs do not fit on 390px and a horizontally scrolling strip with
+     no affordance means the last one may as well not exist, so they wrap. The
+     tagline is decoration and goes; the title stops taking two lines. */
+  @media (max-width:560px){
+    .wrap{ padding:18px 14px 96px; }
+    .brand h1{ font-size:1.45rem; }
+    .brand .tag{ display:none; }
+    .tabs{ flex-wrap:wrap; overflow-x:visible; row-gap:0; }
+    .tab{ padding:9px 11px; font-size:0.86rem; }
+    .section-head h2{ font-size:1.15rem; }
+    /* Header actions read as a row of equals rather than a ragged stack. */
+    .section-head .row-actions .btn-sm{ flex:1 1 auto; text-align:center; }
+    /* A labelled pill is a lot of screen to give a floating button when it sits
+       over the content you are reading. On a phone it is just the mark. */
+    .asst-bubble{ padding:0; width:56px; height:56px; justify-content:center; right:14px; }
+    .asst-bubble-text{ display:none; }
+    .asst-bubble-icon{ font-size:1.3rem; }
+  }
+
   .card{ background:var(--card); border:1.5px solid var(--line); border-radius:14px; padding:20px; }
   .hero{ text-align:center; display:flex; flex-direction:column; align-items:center; gap:14px; padding:52px 28px; }
   .hero h2{ font-size:2rem; font-weight:900; max-width:22ch; letter-spacing:-0.035em; }
@@ -143,7 +162,7 @@
   /* the shelf heading carries its own count, right-aligned like the grocery list */
   .g-section h3 .muted{ font-size:0.68rem; font-weight:800; }
 
-  .have-it-btn{ margin-top:5px; font-size:0.74rem; }
+  .have-it-btn{ font-size:0.78rem; }
 
   /* form */
   .field{ margin-bottom:14px; }
@@ -198,7 +217,11 @@
   @media (min-width:640px){ .cook-overlay{ align-items:center; padding:20px; } }
   .cook-sheet{ background:var(--card); width:100%; max-width:720px; margin:0 auto; display:flex;
     flex-direction:column; max-height:100vh; height:100vh; }
-  @media (min-width:640px){ .cook-sheet{ height:auto; max-height:90vh; border-radius:18px; box-shadow:var(--shadow-lift); } }
+  @supports (height: 100dvh){ .cook-sheet{ max-height:100dvh; height:100dvh; } }
+  @media (min-width:640px){
+    .cook-sheet{ height:auto; max-height:90vh; border-radius:18px; box-shadow:var(--shadow-lift); }
+    @supports (height: 100dvh){ .cook-sheet{ max-height:90dvh; } }
+  }
   .cook-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px;
     padding:18px 20px 14px; border-bottom:1.5px solid var(--line); flex:none; }
   .cook-name{ font-size:1.15rem; font-weight:900; letter-spacing:-0.03em; }
@@ -293,6 +316,7 @@
   .overlay{ position:fixed; inset:0; background:rgba(20,25,20,0.38); display:flex; align-items:flex-end; justify-content:center; z-index:30; }
   @media (min-width:640px){ .overlay{ align-items:center; padding:20px; } }
   .sheet{ background:var(--card); width:100%; max-width:660px; max-height:88vh; overflow-y:auto;
+    max-height:min(88vh, 88dvh);
     border-radius:18px 18px 0 0; padding:22px 22px 28px; box-shadow:var(--shadow-lift); }
   @media (min-width:640px){ .sheet{ border-radius:16px; } }
   .sheet-head{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; }
@@ -343,13 +367,22 @@
   .g-section h3{ font-size:0.68rem; text-transform:uppercase; letter-spacing:0.12em; font-weight:800; color:var(--ink-soft);
     display:flex; justify-content:space-between; align-items:center; gap:10px; border-bottom:1.5px solid var(--line);
     padding-bottom:7px; margin-bottom:8px; }
-  .g-item{ display:flex; align-items:flex-start; gap:12px; padding:10px 2px; border-bottom:1px solid var(--line); }
+  /* Stacked, not side by side: the tick target is the full-width top line and
+     the row's own actions sit under it. Flexing them as siblings put "I already
+     have this" beside the item name and squeezed both. */
+  .g-item{ border-bottom:1px solid var(--line); }
   .g-item:last-child{ border-bottom:none; }
-  .g-item input[type="checkbox"]{ width:22px; height:22px; margin-top:1px; flex:none; accent-color:var(--olive); }
+  /* The label wraps the box and the name, so the whole line is the tick target —
+     a 22px box is not something you hit reliably in a shop with a basket. */
+  .g-tick{ display:flex; align-items:flex-start; gap:12px; min-width:0; cursor:pointer;
+    padding:13px 2px 6px; margin:0; }
+  .g-item input[type="checkbox"]{ width:26px; height:26px; margin-top:1px; flex:none; accent-color:var(--olive); }
+  .g-actions{ padding:0 2px 11px 38px; }
+  .have-it-btn, .g-item .pantry-note .btn-link{ padding:8px 0; display:inline-block; }
   .g-item.checked .g-name{ text-decoration:line-through; color:var(--ink-soft); }
   .g-body{ flex:1; min-width:0; }
-  .g-line{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
-  .g-name{ font-weight:700; font-size:0.94rem; min-width:0; }
+  .g-line{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+  .g-name{ font-weight:700; font-size:0.94rem; min-width:0; flex:1 1 auto; }
   .g-total{ font-weight:700; font-size:0.86rem; white-space:nowrap; flex:none;
     font-variant-numeric:tabular-nums; color:var(--ink); }
   .g-meta{ font-size:0.76rem; color:var(--ink-soft); }
@@ -375,8 +408,8 @@
     border:1.5px solid var(--line-strong); box-shadow:var(--shadow-lift);
     right:0; left:0; bottom:0; top:0; border-radius:0; }
   @media (min-width:640px){
-    .asst-panel{ right:18px; left:auto; bottom:18px; top:auto; width:420px; max-height:min(640px, 82vh);
-      border-radius:16px; }
+    .asst-panel{ right:18px; left:auto; bottom:18px; top:auto; width:420px;
+      max-height:min(640px, 82vh); max-height:min(640px, 82dvh); border-radius:16px; }
   }
   .asst-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex:none;
     padding:16px 18px 13px; border-bottom:1.5px solid var(--line); }
@@ -2439,6 +2472,7 @@
   // ---- Assistant bubble ----
   function renderAssistant(){
     if (!sampleFn || sampleUnavailable) return '';
+    if (ui.cook || ui.formOpen || ui.weekPickerOpen) return '';
     var a = ui.asst;
     if (!a.open){
       return '<button type="button" class="asst-bubble" data-action="openAsst" aria-label="Ask the assistant">' +
@@ -2958,25 +2992,28 @@
     var key = groceryKey(section, item.item);
     var isChecked = isGroceryChecked(checked, key);
     return '<div class="g-item'+(isChecked?' checked':'')+'">' +
-      '<input type="checkbox" data-action="toggleGroceryItem" data-id="'+encodeURIComponent(key)+'"'+(isChecked?' checked':'')+'>' +
-      '<div class="g-body">' +
-        '<div class="g-line">' +
-          '<span class="g-name">'+escapeHtml(item.item)+
-            (item.inPantry ? ' <span class="chip in-pantry">In pantry</span>' : '')+'</span>' +
-          '<span class="g-total mono">'+escapeHtml(formatQty(item))+'</span>' +
+      '<label class="g-tick">' +
+        '<input type="checkbox" data-action="toggleGroceryItem" data-id="'+encodeURIComponent(key)+'"'+(isChecked?' checked':'')+'>' +
+        '<div class="g-body">' +
+          '<div class="g-line">' +
+            '<span class="g-name">'+escapeHtml(item.item)+
+              (item.inPantry ? ' <span class="chip in-pantry">In pantry</span>' : '')+'</span>' +
+            '<span class="g-total mono">'+escapeHtml(formatQty(item))+'</span>' +
+          '</div>' +
+          renderMealsLine(item) +
+          (item.mergedFrom && item.mergedFrom.length
+            ? '<div class="g-meta">Also listed as '+escapeHtml(item.mergedFrom.join(', '))+'</div>' : '') +
+          (item.flag ? '<div class="g-flag">'+escapeHtml(flagLabel(item.flag))+(item.substitute? ' — '+escapeHtml(item.substitute) : ' — no solid substitute, decide in the shop')+'</div>'
+            : (item.substitute ? '<div class="g-meta">Note: '+escapeHtml(item.substitute)+'</div>' : '')) +
         '</div>' +
-        renderMealsLine(item) +
-        (item.mergedFrom && item.mergedFrom.length
-          ? '<div class="g-meta">Also listed as '+escapeHtml(item.mergedFrom.join(', '))+'</div>' : '') +
+      '</label>' +
+      '<div class="g-actions">' +
         (item.extra
-          ? '<div class="g-meta">Added by hand &middot; <button type="button" class="btn-link" data-action="removeBuyItem" data-id="'+encodeURIComponent(item.item)+'">take it off</button></div>'
-          : '') +
-        (item.flag ? '<div class="g-flag">'+escapeHtml(flagLabel(item.flag))+(item.substitute? ' — '+escapeHtml(item.substitute) : ' — no solid substitute, decide in the shop')+'</div>'
-          : (item.substitute ? '<div class="g-meta">Note: '+escapeHtml(item.substitute)+'</div>' : '')) +
-        (item.inPantry
-          ? '<div class="g-meta pantry-note">Covered by “'+escapeHtml(item.pantryMatch || item.item)+'” in your pantry' +
-            ' <button type="button" class="btn-link" data-action="unmatchPantryItem" data-id="'+encodeURIComponent(item.item)+'">not really</button></div>'
-          : '<button type="button" class="btn-link have-it-btn" data-action="addGroceryItemToPantry" data-id="'+encodeURIComponent(item.item)+'">I already have this</button>') +
+          ? '<button type="button" class="btn-link have-it-btn" data-action="removeBuyItem" data-id="'+encodeURIComponent(item.item)+'">Take it off the list</button>'
+          : (item.inPantry
+            ? '<div class="g-meta pantry-note">Covered by “'+escapeHtml(item.pantryMatch || item.item)+'” in your pantry' +
+              ' <button type="button" class="btn-link" data-action="unmatchPantryItem" data-id="'+encodeURIComponent(item.item)+'">not really</button></div>'
+            : '<button type="button" class="btn-link have-it-btn" data-action="addGroceryItemToPantry" data-id="'+encodeURIComponent(item.item)+'">I already have this</button>')) +
       '</div></div>';
   }
 
@@ -4760,7 +4797,7 @@
       // The grocery row already knows which aisle it came from, so carry that
       // across rather than dumping everything into "Everything else".
       var section = 'other';
-      var row = el && el.closest ? el.closest('.g-section') : null;
+      var row = el && el.closest ? el.closest('.g-section') : null;  // still the section wrapper
       if (row){
         var heading = row.querySelector('h3');
         var label = heading ? heading.textContent.replace(/\d+$/, '').trim() : '';
