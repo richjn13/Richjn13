@@ -16,6 +16,9 @@ Three free accounts, and nothing else:
   your site.
 - **Anthropic** — an API key for the AI features. This is the only one that
   costs anything, and at two people planning a week it is pennies a month.
+  Note that API billing is **separate from a Claude.ai subscription**: Pro or
+  Max does not include it, and a fresh API account with no credit fails every
+  call. See step 4.
 
 **You do not need to buy a domain or already own a website.** The page has to be
 served from somewhere because a browser loads it over the web, and Vercel is
@@ -99,7 +102,7 @@ repo:
 
 | Variable | Where it comes from | Used by |
 | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | console.anthropic.com → API keys | the function only |
+| `ANTHROPIC_API_KEY` | console.anthropic.com → API keys → Create key | the function only |
 | `SUPABASE_URL` | Project Settings → API → Project URL | the function and the build |
 | `SUPABASE_ANON_KEY` | Project Settings → API → anon key | the function and the build |
 
@@ -109,6 +112,21 @@ Vercel that is the default; just don't restrict them to the function.
 
 Gating the proxy on a session token matters: an open proxy is a free API key for
 whoever finds it, and scanners find them within days.
+
+**Getting the Anthropic key.** At console.anthropic.com, under API keys, create
+one and copy it straight away — it is shown once. Two things about billing:
+
+- It is **not** covered by a Claude.ai Pro or Max subscription. They are
+  separate products on the same login. A new API account starts with no credit
+  and every call fails with a billing error, which reads like a broken key.
+  Add a payment method or buy credit under Billing first.
+- Set a **monthly spend limit** while you are in there. Two people planning
+  dinners cannot realistically run up a bill, but a limit means a bug cannot
+  either.
+
+The key goes in the host's environment and nowhere else. Not in the repo, not in
+`config.js`, not in a commit you mean to undo later — a key in a git history is
+a key that has leaked.
 
 **Cost.** Anthropic bills per token. The app calls it for PDF extraction, tidying
 the grocery list, adjusting a recipe and estimating macros — each one a fraction
