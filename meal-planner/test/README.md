@@ -33,10 +33,27 @@ protection now covers the inline editors on This Week.
 ## Running
 
 ```
-npm install playwright-core
-node edit-form.e2e.js      # or any other suite
-node mobile.e2e.js         # builds dist/ first, then measures at 390px
+cd meal-planner
+npm install
+npm test                   # every suite in series
+node test/edit-form.e2e.js # or one at a time
 ```
+
+`mobile.e2e.js` builds `dist/` first — it has to measure the page that carries
+the viewport meta, not the raw fragment.
+
+The database schema has its own check, which needs a local Postgres rather than
+Chromium:
+
+```
+createdb mp_test
+psql -v ON_ERROR_STOP=1 -d mp_test -f supabase/local-prelude.sql
+psql -v ON_ERROR_STOP=1 -d mp_test -f supabase/schema.sql
+psql -v ON_ERROR_STOP=1 -d mp_test -f supabase/rls-test.sql
+```
+
+It creates three users, has two share a household and one stand outside it, and
+raises an exception if the outsider can read or write anything of theirs.
 
 Each suite is standalone and exits non-zero on failure. Point `executablePath`
 at a Chromium build if `/opt/pw-browsers` isn't present.

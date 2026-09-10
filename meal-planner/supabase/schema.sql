@@ -243,7 +243,17 @@ grant execute on function rotate_invite_code()   to authenticated;
 
 -- ------------------------------------------------------------------- realtime
 
-alter publication supabase_realtime add table meals;
-alter publication supabase_realtime add table weeks;
-alter publication supabase_realtime add table pantry;
-alter publication supabase_realtime add table history;
+-- Adding a table that is already published raises an error, which would make
+-- re-running this whole file fail. Everything above is idempotent; this is too.
+do $$
+declare t text;
+begin
+  foreach t in array array['meals', 'weeks', 'pantry', 'history'] loop
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t
+    ) then
+      execute format('alter publication supabase_realtime add table %I', t);
+    end if;
+  end loop;
+end $$;

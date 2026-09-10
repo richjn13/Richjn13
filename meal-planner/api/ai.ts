@@ -5,8 +5,16 @@
 // leaked key bills to you until you notice. So the browser talks to this, and
 // only this talks to Anthropic.
 //
-// Deploy target: Vercel / Netlify Functions / Cloudflare Pages Functions — any
-// runtime that gives a Request and takes a Response.
+// Deploy target: Vercel's Edge runtime, declared below. The Web-standard
+// Request/Response signature is what Edge takes; Vercel's Node runtime uses a
+// different (req, res) shape, so the `config` export is not optional.
+//
+// For Netlify: move this to netlify/functions/ai.mts and change the export to
+// `export default async (req: Request) => {}` plus
+// `export const config = { path: "/api/ai" }`.
+// For Cloudflare Pages: move to functions/api/ai.ts and export
+// `export const onRequestPost: PagesFunction = ({ request, env }) => handler(request)`,
+// reading the keys off `env` rather than process.env.
 //
 // Required environment variables (set them in the host's dashboard, never in
 // the repo):
@@ -18,6 +26,8 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
+
+export const config = { runtime: 'edge' };
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -61,7 +71,13 @@ async function userIdFromRequest(req: Request): Promise<string | null> {
   const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
   if (!token) return null;
 
-  const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
+  const url = process.env.SUPABASE_URL;
+  const anonKey = process.env.SUPABASE_ANON_KEY;
+  if (!url || !anonKey) {
+    console.error('[api/ai] SUPABASE_URL or SUPABASE_ANON_KEY is not set');
+    return null;
+  }
+  const supabase = createClient(url, anonKey);
   const { data, error } = await supabase.auth.getUser(token);
   if (error || !data?.user) return null;
   return data.user.id;
@@ -109,7 +125,9 @@ export default async function handler(req: Request): Promise<Response> {
     const stream = anthropic.messages.stream({
       model: MODEL,
       max_tokens: MAX_TOKENS,
-      thinking: { type: 'adaptive' },
+      // No `thinking` parameter: Opus 5 runs adaptive thinking by default, and
+      // the older fixed-budget form it would otherwise take is rejected with a
+      // 400 on this model.
       messages: [{ role: 'user', content: prompt }],
     });
     const message = await stream.finalMessage();

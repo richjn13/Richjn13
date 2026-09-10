@@ -55,14 +55,39 @@ for (const file of ['manifest.webmanifest', 'sw.js', 'icon-192.png', 'icon-512.p
   else console.warn(`  missing web/${file} — the build will work but the install prompt won't`);
 }
 
+// Where the Supabase details come from, in order:
+//
+//   1. web/config.js on disk — local development.
+//   2. SUPABASE_URL / SUPABASE_ANON_KEY in the environment — a host's build.
+//   3. Neither, and the app runs on-device only.
+//
+// The env-var path matters: web/config.js is gitignored, so without it a
+// deploy would build the third case and quietly ship an app where the two of
+// you each get a private list. That is the failure that looks like success.
 const config = join(root, 'web', 'config.js');
+const envUrl = process.env.SUPABASE_URL;
+const envKey = process.env.SUPABASE_ANON_KEY;
+
 if (existsSync(config)) {
   copyFileSync(config, join(dist, 'config.js'));
+  console.log('  config from web/config.js');
+} else if (envUrl && envKey) {
+  writeFileSync(join(dist, 'config.js'),
+    '// Generated at build time from the environment. Do not edit.\n' +
+    'window.MP_CONFIG = ' + JSON.stringify({
+      supabaseUrl: envUrl,
+      supabaseAnonKey: envKey,
+      aiEndpoint: process.env.AI_ENDPOINT || '/api/ai'
+    }, null, 2) + ';\n');
+  console.log('  config from SUPABASE_URL / SUPABASE_ANON_KEY');
 } else {
-  // Without config.js the app still runs, on-device only. Better than a blank
-  // page, and the reason is visible in the footnote.
-  writeFileSync(join(dist, 'config.js'), '// No web/config.js — running on-device only.\nwindow.MP_CONFIG = null;\n');
-  console.warn('  no web/config.js — built in on-device mode (copy web/config.example.js)');
+  writeFileSync(join(dist, 'config.js'), '// No Supabase config — running on-device only.\nwindow.MP_CONFIG = null;\n');
+  console.warn('');
+  console.warn('  !! No Supabase config found. Built in ON-DEVICE mode:');
+  console.warn('     no shared list, no accounts, no AI. Each browser keeps its own copy.');
+  console.warn('     Set SUPABASE_URL and SUPABASE_ANON_KEY, or copy web/config.example.js');
+  console.warn('     to web/config.js. See SETUP.md.');
+  console.warn('');
 }
 
 console.log('built dist/ from app/index.html');
