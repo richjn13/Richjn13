@@ -64,6 +64,16 @@ const slot = (page, name) => page.locator('.slot-wrap', { hasText: name }).first
   check('slot shows pantry coverage percentage', trayText.indexOf('50% in pantry') !== -1, true);
   check('slot counts the covered ingredients', trayText.indexOf('4 of 8 ingredients') !== -1, true);
 
+  // The meter is drawn, not just described. It shipped once as an inline span,
+  // which ignores height, so the bar rendered empty at every percentage while
+  // the sentence beside it still read correctly — text assertions saw nothing.
+  const barBox = await tray.locator('.cover-bar').first().boundingBox();
+  const fillBox = await tray.locator('.cover-fill').first().boundingBox();
+  check('the coverage bar has height', barBox.height >= 4, true);
+  check('the fill is drawn', fillBox.height >= 4, true);
+  check('the fill is drawn to the percentage', Math.abs(fillBox.width / barBox.width - 0.5) < 0.08, true);
+  check('the fill is colour-coded by band', await tray.locator('.cover.cover-mid').count(), 1);
+
   const curryText = (await slot(page, 'Curry').innerText()).replace(/\s+/g, ' ').toLowerCase();
   check('coverage is per meal, not global', curryText.indexOf('25% in pantry') !== -1, true);
 

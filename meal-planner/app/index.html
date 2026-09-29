@@ -26,6 +26,10 @@
     --navy-tint: #E6ECF5;
     --danger: #A81F16;
     --neutral-tint: #F1F2F0;
+    /* A ground one step off white, for panels that sit behind content rather
+       than beside it — the expanded recipe, the shelves. */
+    --sunk: #FAFAF8;
+    --line-soft: #EDF0EC;
     --shadow-lift: 0 12px 34px -14px rgba(20,25,26,0.34);
     --accent: var(--terracotta);
     --accent-ink: var(--terracotta-ink);
@@ -72,6 +76,17 @@
     .section-head .row-actions .btn-sm{ flex:1 1 auto; text-align:center; }
     /* A labelled pill is a lot of screen to give a floating button when it sits
        over the content you are reading. On a phone it is just the mark. */
+    /* Same shape on both lists: the one action you came for spans the row, and
+       the rest share an evenly spaced strip under a hairline. Letting five
+       buttons flow left whichever one didn't fit stranded on a line of its own. */
+    .meal-row{ align-items:stretch; }
+    .meal-row .row-actions{ width:100%; justify-content:space-between; gap:6px;
+      border-top:1px solid var(--line-soft); margin-top:12px; padding-top:10px; }
+    .meal-row .row-actions .btn-week{ order:-1; width:100%; margin-bottom:4px; }
+    .slot{ align-items:stretch; }
+    .slot .row-actions{ width:100%; justify-content:space-between; gap:4px 10px;
+      border-top:1px solid var(--line-soft); margin-top:12px; padding-top:10px; }
+    .slot .row-actions .btn-forest{ order:-1; width:100%; margin-bottom:4px; }
     .asst-bubble{ padding:0; width:56px; height:56px; justify-content:center; right:14px; }
     .asst-bubble-text{ display:none; }
     .asst-bubble-icon{ font-size:1.3rem; }
@@ -100,6 +115,27 @@
   .btn[disabled]{ opacity:0.4; cursor:default; }
   .row-actions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
 
+  /* Rows carry one action worth noticing and several worth finding. The week
+     toggle is the thing you came to the Meals list to do, so it keeps the olive
+     outline; Cook / View / Edit stay plain; Delete is a word, not a button, and
+     only turns red once you are actually on it. Four identical outlines gave
+     every row the visual weight of a toolbar. */
+  .btn-week{ border-color:var(--olive); color:var(--olive); }
+  .btn-week:hover:not([disabled]){ background:var(--olive-tint); }
+  .meal-row .row-actions{ gap:6px; }
+  .meal-row .btn-link[data-action="askDelete"]{ color:var(--ink-soft); text-decoration:none;
+    font-weight:700; padding:6px 6px; }
+  .meal-row .btn-link[data-action="askDelete"]:hover{ color:var(--danger); text-decoration:underline; }
+
+  /* A night on the plan: Cook is the button, the four edits behind it are a
+     quiet strip of words. On a phone they sit on their own line rather than
+     leaving "remove" stranded under a row of links. */
+  .slot .row-actions{ gap:4px 12px; align-items:center; }
+  .slot .row-actions .btn-link{ color:var(--ink-soft); text-decoration:none; font-size:0.78rem;
+    font-weight:700; padding:5px 0; }
+  .slot .row-actions .btn-link:hover{ color:var(--terracotta); text-decoration:underline; }
+  .slot .row-actions .btn-link[data-action="removeFromWeek"]:hover{ color:var(--danger); }
+
   .section-head{ display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
   .section-head h2{font-size:1.3rem; font-weight:900; letter-spacing:-0.03em;}
   .muted{ color:var(--ink-soft); font-size:0.85rem; font-weight:500; }
@@ -123,20 +159,37 @@
   .filters select, .filters input[type="search"]{ border:1.5px solid var(--line-strong); background:var(--card);
     color:var(--ink); border-radius:9px; padding:8px 11px; font-size:0.82rem; font-weight:600; }
   .meal-list{ display:flex; flex-direction:column; gap:10px; }
+  .meal-list .meal-row-wrap + .meal-row-wrap{ margin-top:0; }
   .list-divider{ font-size:0.64rem; text-transform:uppercase; letter-spacing:0.14em; font-weight:800;
     color:var(--ink-soft); padding-top:6px; }
   .list-divider:first-child{ padding-top:0; }
-  .meal-row-wrap{ display:flex; flex-direction:column; gap:8px; }
+  .meal-row-wrap{ display:flex; flex-direction:column; }
   .meal-row{ background:var(--card); border:1.5px solid var(--line); border-radius:12px; padding:14px 16px;
-    display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+    display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; }
   .meal-row:hover{ border-color:var(--line-strong); }
+  /* An expanded recipe belongs to the row above it. Joined edges and a sunk
+     ground say so; a floating card of its own read as a second meal. */
+  .meal-row-wrap.open .meal-row{ border-bottom-left-radius:0; border-bottom-right-radius:0;
+    border-bottom-color:transparent; }
+  .meal-row-wrap.open .meal-detail{ border-top-left-radius:0; border-top-right-radius:0; margin-top:-1.5px; }
   .meal-row .m-name-btn{ background:none; border:none; padding:0; cursor:pointer; text-align:left; color:var(--ink);
     font-weight:800; font-size:1.05rem; letter-spacing:-0.02em; }
   .meal-row .m-name-btn:hover{ color:var(--terracotta); }
-  .meal-row .m-meta{ display:flex; gap:7px; flex-wrap:wrap; align-items:center; margin-top:6px; }
+  /* Facts about a meal, read left to right with real separators instead of
+     running into one another. Numbers stay in the mono face so they line up
+     down the list; words stay in the body face. */
+  .m-meta{ display:flex; gap:0 9px; flex-wrap:wrap; align-items:center; margin-top:7px;
+    font-size:0.8rem; color:var(--ink-soft); row-gap:6px; }
+  /* A dot between two adjacent plain facts, drawn by CSS so it never lands in
+     the text layer — nothing reading the row has to strip it back out. Chips and
+     the rank control are objects rather than facts and take no separator. */
+  .m-meta > .muted:has(+ .muted)::after{ content:"\00b7"; color:var(--line-strong);
+    font-weight:800; margin-left:9px; }
+  .m-meta .mono{ font-size:0.76rem; font-variant-numeric:tabular-nums; }
+  .meal-row .m-meta{ margin-top:6px; }
   .meal-row .m-info{ flex:1; min-width:200px; }
   .empty-state{ text-align:center; padding:44px 20px; color:var(--ink-soft); }
-  .meal-detail{ background:var(--card); border:1.5px solid var(--line-strong); border-radius:12px; padding:16px 18px; }
+  .meal-detail{ background:var(--sunk); border:1.5px solid var(--line); border-radius:12px; padding:18px; }
   .detail-block{ margin-bottom:14px; }
   .detail-block:last-child{ margin-bottom:0; }
   .detail-block h4{ font-size:0.64rem; text-transform:uppercase; letter-spacing:0.12em; color:var(--ink-soft); margin-bottom:6px; font-weight:800; }
@@ -285,11 +338,20 @@
   .g-chip.on .g-chip-count{ background:rgba(255,255,255,0.22); color:var(--olive-ink); }
 
   /* pantry coverage */
-  .cover{ display:flex; align-items:center; gap:8px; margin-top:7px; }
-  .cover-bar{ flex:none; width:74px; height:7px; border-radius:999px; background:var(--neutral-tint); overflow:hidden; }
-  .cover-fill{ height:100%; background:var(--olive); border-radius:999px; }
-  .cover-text{ font-size:0.75rem; color:var(--ink-soft); font-weight:700; }
+  /* Text first, meter second: the sentence is what you read, the bar only
+     confirms it. The fill is colour-coded so a glance down the list separates
+     "cook this tonight" from "that's a shop", without reading a single number. */
+  .cover{ display:flex; align-items:center; gap:10px; margin-top:8px; flex-wrap:nowrap; }
+  .cover-bar{ flex:none; display:block; width:70px; height:7px; border-radius:999px;
+    background:var(--neutral-tint); overflow:hidden; box-shadow:inset 0 0 0 1px rgba(20,25,26,0.05); }
+  .cover-fill{ display:block; height:100%; background:var(--olive); border-radius:999px; min-width:3px; }
+  .cover-text{ font-size:0.76rem; color:var(--ink-soft); font-weight:600; min-width:0;
+    font-variant-numeric:tabular-nums; }
   .cover-text strong{ color:var(--olive); font-weight:800; }
+  .cover.cover-mid .cover-fill{ background:var(--navy); }
+  .cover.cover-mid .cover-text strong{ color:var(--navy); }
+  .cover.cover-low .cover-fill{ background:var(--terracotta); }
+  .cover.cover-low .cover-text strong{ color:var(--terracotta); }
   .ing-list li.covered > span:first-child{ color:var(--ink); }
   .ing-cover{ font-size:0.62rem; text-transform:uppercase; letter-spacing:0.06em; font-weight:800;
     color:var(--olive); background:var(--olive-tint); border-radius:999px; padding:2px 7px; margin-left:6px; }
@@ -337,17 +399,25 @@
     justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
   .slot .m-name{ font-weight:800; font-size:1.02rem; letter-spacing:-0.02em; }
   .slot .m-meta{ display:flex; gap:7px; flex-wrap:wrap; align-items:center; margin-top:6px; }
-  .slot-empty-btn{ flex:1; border:2px dashed var(--line-strong); border-radius:10px; background:none; color:var(--ink-soft);
-    padding:16px; cursor:pointer; text-align:center; font-size:0.85rem; font-weight:800; }
-  .slot-empty-btn:hover{ border-color:var(--terracotta); color:var(--terracotta); }
-  .slot-stepper{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
-    background:var(--card); border:1.5px solid var(--line); border-radius:12px;
-    padding:12px 16px; margin-bottom:14px; }
-  .hero .slot-stepper{ width:100%; max-width:340px; justify-content:center; gap:18px; margin:4px 0 2px; }
+  /* An empty night shouldn't take as much room as a planned one — the card
+     border around a dashed button was two frames saying the same thing. */
+  .slot.slot-open{ background:none; border:none; padding:0; }
+  .slot-empty-btn{ flex:1; border:1.5px dashed var(--line-strong); border-radius:12px; background:none;
+    color:var(--ink-soft); padding:13px; cursor:pointer; text-align:center; font-size:0.82rem; font-weight:800; }
+  .slot-empty-btn:hover{ border-color:var(--terracotta); color:var(--terracotta); background:var(--sunk); }
+  /* On the planning screen this is one small control, so it sits inline at its
+     own width instead of spanning a card the width of the page with a number
+     floating at each end. In the hero it is the one thing being asked, so there
+     it stays large and centred. */
+  .slot-stepper{ display:inline-flex; align-items:center; gap:14px; flex-wrap:wrap;
+    background:var(--sunk); border:1.5px solid var(--line); border-radius:999px;
+    padding:7px 9px 7px 18px; margin-bottom:16px; }
+  .hero .slot-stepper{ display:flex; width:100%; max-width:340px; justify-content:center; gap:18px;
+    border-radius:14px; padding:14px 18px; margin:4px 0 2px; }
   .slot-stepper-label{ font-size:0.62rem; text-transform:uppercase; letter-spacing:0.12em;
     color:var(--ink-soft); font-weight:800; }
   .stepper{ display:inline-flex; align-items:center; gap:4px; }
-  .step-btn{ width:38px; height:38px; border-radius:10px; border:1.5px solid var(--line-strong);
+  .step-btn{ width:38px; height:38px; border-radius:50%; border:1.5px solid var(--line-strong);
     background:var(--card); color:var(--ink); font-size:1.15rem; font-weight:800; cursor:pointer;
     display:inline-flex; align-items:center; justify-content:center; }
   .step-btn:hover:not([disabled]){ border-color:var(--olive); color:var(--olive); }
@@ -358,7 +428,12 @@
   .loose-note{ font-size:0.82rem; color:var(--ink-soft); text-align:center; margin-bottom:18px; }
   .warnbox{ border-radius:12px; padding:13px 15px; margin-bottom:14px; font-size:0.85rem; border:1.5px solid transparent; font-weight:600; }
   .warnbox.warn{ background:var(--terracotta-tint); color:var(--terracotta); border-color:var(--terracotta); }
-  .warnbox.info{ background:var(--navy-tint); color:var(--navy); border-color:var(--navy); }
+  /* Kept deliberately quieter than .warn: "these two share an ingredient" is
+     a nice thing to know and shouldn't shout as loudly as "you're three meals
+     short this week". */
+  .warnbox.info{ background:var(--sunk); color:var(--ink-soft); border-color:var(--line);
+    border-left:3px solid var(--navy); font-size:0.82rem; padding:11px 14px; }
+  .warnbox.info strong{ color:var(--navy); }
   .warnbox ul{ margin:4px 0 0; padding-left:18px; }
   .warnbox strong{ color:inherit; font-weight:800; }
 
@@ -378,7 +453,10 @@
     padding:13px 2px 6px; margin:0; }
   .g-item input[type="checkbox"]{ width:26px; height:26px; margin-top:1px; flex:none; accent-color:var(--olive); }
   .g-actions{ padding:0 2px 11px 38px; }
-  .have-it-btn, .g-item .pantry-note .btn-link{ padding:8px 0; display:inline-block; }
+  .have-it-btn, .g-item .pantry-note .btn-link{ padding:8px 0; display:inline-block;
+    color:var(--ink-soft); text-decoration:none; font-weight:700; }
+  .have-it-btn:hover, .g-item .pantry-note .btn-link:hover{ color:var(--olive); text-decoration:underline; }
+  .have-it-btn[data-action="removeBuyItem"]:hover{ color:var(--danger); }
   .g-item.checked .g-name{ text-decoration:line-through; color:var(--ink-soft); }
   .g-body{ flex:1; min-width:0; }
   .g-line{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap; }
@@ -999,7 +1077,10 @@
     if (!cov || !cov.total) return '';
     opts = opts || {};
     var pct = cov.pct;
-    return '<div class="cover">' +
+    // Three bands, so the colour says something before the number is read:
+    // most of it in the house, a real shop, or start from scratch.
+    var level = pct >= 75 ? 'cover-high' : (pct >= 40 ? 'cover-mid' : 'cover-low');
+    return '<div class="cover '+level+'">' +
       '<span class="cover-bar"><span class="cover-fill" style="width:'+pct+'%;"></span></span>' +
       '<span class="cover-text"><strong>'+pct+'%</strong> in pantry &middot; '+cov.covered+' of '+cov.total+' ingredient'+(cov.total===1?'':'s') +
       (opts.showShort && cov.missing.length ? ' &middot; '+cov.missing.length+' to buy' : '') +
@@ -2734,7 +2815,7 @@
       if (m){
         html += renderWeekSlot(m, i);
       } else {
-        html += '<div class="slot"><button class="slot-empty-btn" data-action="openWeekPicker" data-id="'+i+'">+ pick meal '+(i+1)+'</button></div>';
+        html += '<div class="slot slot-open"><button class="slot-empty-btn" data-action="openWeekPicker" data-id="'+i+'">+ pick meal '+(i+1)+'</button></div>';
       }
     }
     html += '</div>';
@@ -3095,7 +3176,7 @@
     var html = '<div class="section-head" id="grocery-list"><h2>Grocery list</h2>' +
       '<div class="row-actions">' +
         (!sampleUnavailable
-          ? '<button class="btn btn-navy btn-sm" data-action="checkPantryWithAi"'+(ui.pantryChecking?' disabled':'')+'>'+(ui.pantryChecking?'Tidying…':'Tidy list with AI')+'</button>'
+          ? '<button class="btn btn-ghost btn-sm" data-action="checkPantryWithAi"'+(ui.pantryChecking?' disabled':'')+'>'+(ui.pantryChecking?'Tidying…':'Tidy list with AI')+'</button>'
           : '') +
         '<button class="btn btn-forest btn-sm" data-action="copyGrocery" data-id="buy">'+(only?'Copy this meal’s list':'Copy buy list')+'</button>' +
         '<button class="btn btn-ghost btn-sm" data-action="copyGrocery" data-id="cupboard">Copy cupboard-check</button>' +
@@ -3218,7 +3299,7 @@
   function renderMealRow(m, currentWeekIds, weekFull){
     var expanded = ui.expandedMealId === m.id;
     var inWeek = currentWeekIds.indexOf(m.id) !== -1;
-    var html = '<div class="meal-row-wrap"><div class="meal-row"><div class="m-info">' +
+    var html = '<div class="meal-row-wrap'+(expanded?' open':'')+'"><div class="meal-row"><div class="m-info">' +
       '<button type="button" class="m-name-btn" data-action="toggleMealView" data-id="'+m.id+'">'+escapeHtml(m.name)+'</button>' +
       '<div class="m-meta">' +
         // Ranking straight from the row: it's the edit you make most often, and
@@ -3242,9 +3323,9 @@
       html += '<span class="muted">Delete for good?</span> <button class="btn-link" data-action="confirmDelete" data-id="'+m.id+'">Yes, delete</button> <button class="btn-link" data-action="cancelDelete" data-id="'+m.id+'">Cancel</button>';
     } else {
       if (inWeek){
-        html += '<button class="btn btn-ghost btn-sm" data-action="removeMealFromWeekById" data-id="'+m.id+'">Remove from week</button>';
+        html += '<button class="btn btn-ghost btn-sm btn-week" data-action="removeMealFromWeekById" data-id="'+m.id+'">Remove from week</button>';
       } else {
-        html += '<button class="btn btn-ghost btn-sm" data-action="addMealToWeek" data-id="'+m.id+'"'+(weekFull?' disabled title="This week is already full"':'')+'>'+(weekFull?'Week full':'+ Add to week')+'</button>';
+        html += '<button class="btn btn-ghost btn-sm btn-week" data-action="addMealToWeek" data-id="'+m.id+'"'+(weekFull?' disabled title="This week is already full"':'')+'>'+(weekFull?'Week full':'+ Add to week')+'</button>';
       }
       html += '<button class="btn btn-ghost btn-sm" data-action="openCook" data-id="'+m.id+'">Cook</button>' +
         '<button class="btn btn-ghost btn-sm" data-action="toggleMealView" data-id="'+m.id+'">'+(expanded?'Hide':'View')+'</button>' +
