@@ -1,8 +1,9 @@
 ### Hi there 👋
 
-I build small, practical apps for the people around me: my household, my friends,
-the group chat. Most of them run on TypeScript, Supabase and Vercel, with Claude
-doing the heavy lifting where an app needs to read or write like a person.
+I build practical things, at work and at home: data analysis for my job, and
+small apps for my household and friends. The apps mostly run on TypeScript,
+Supabase and Vercel, with Claude doing the heavy lifting where an app needs to
+read or write like a person.
 
 ---
 
@@ -18,7 +19,13 @@ doing the heavy lifting where an app needs to read or write like a person.
 | --- | --- | --- |
 | [**Meal Planner**](https://github.com/richjn13/Richjn13/tree/Dinner-Choices-App/meal-planner) | Keeps a household's list of meals, helps pick five for the week, and turns them into one grocery list grouped by shop section. Works from a phone. | TypeScript, Supabase, Claude API |
 
+### 📊 Work & data analysis
+
+Projects coming soon.
+
 <!--
+To add a project to a category, add a row under its table header.
+
 To add a category, copy this block and fill it in:
 
 ### 🧪 Category name
